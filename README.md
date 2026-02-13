@@ -1,0 +1,55 @@
+# Journey Builder Avatar CDN Package
+
+This folder contains a standalone static package for publishing the avatar widget on a CDN.
+
+## Files
+
+- `chat.html`
+- `css/styles.css`
+- `js/chat.js`
+- `image/attachment.jpg`
+- `image/background.png`
+
+## Publish
+
+Upload the whole `avatar-cdn/` folder to your CDN keeping the same structure.
+
+Example public URL:
+
+- `https://cdn.example.com/numia-avatar/chat.html`
+
+## Required query params
+
+- `flowId`: Journey Builder flow ID
+- `hostUrl`: Journey Builder API base URL
+- `apiKey`: Journey Builder API key
+
+## Optional query params
+
+- `autoStart=1`
+- `view=widget`
+- `prompt`
+- `speechRegion`
+- `speechApiKey`
+- `speechPrivateEndpoint`
+- `ttsVoice`
+- `avatarCharacter`
+- `avatarStyle`
+
+## Embed example
+
+```html
+<iframe
+  src="https://cdn.example.com/numia-avatar/chat.html?flowId=YOUR_FLOW_ID&hostUrl=https%3A%2F%2Fapi.example.com&apiKey=YOUR_API_KEY&view=widget&autoStart=1&ttsVoice=en-US-AvaMultilingualNeural&avatarCharacter=lisa&avatarStyle=casual-sitting"
+  title="Journey Builder Avatar"
+  width="84"
+  height="84"
+  style="border:0; border-radius:0; position:fixed; right:max(8px,2vw); bottom:max(8px,2vw); z-index:999999; background:transparent; box-shadow:none; overflow:hidden;"
+  allow="microphone">
+</iframe>
+```
+
+## Notes
+
+- `chat.js` loads Azure Speech SDK from `https://aka.ms/csspeech/jsbrowserpackageraw`.
+- If you use `useLocalVideoForIdle`, publish matching video files under `video/`.

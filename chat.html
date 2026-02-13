@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Journey Builder Avatar</title>
+    <link href="./css/styles.css?v=20260213j" rel="stylesheet">
+    <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+    <script src="./js/chat.js?v=20260213j"></script>
+</head>
+<body class="avatar-page">
+  <button
+    id="avatarFab"
+    class="avatar-fab"
+    onclick="window.toggleAvatarWidget()"
+    aria-expanded="false"
+    aria-label="Abrir avatar"
+    title="Abrir avatar">
+    <span class="avatar-fab-mark">AV</span>
+  </button>
+
+  <div id="avatarWidgetShell" class="avatar-widget-shell" aria-hidden="true">
+    <header class="avatar-widget-header">
+      <div>
+        <h1>Journey Builder Avatar</h1>
+        <p class="avatar-status">
+          <span class="status-dot"></span>
+          <span id="widgetStatusText">Listo para iniciar</span>
+        </p>
+      </div>
+      <button
+        id="avatarClose"
+        class="avatar-close-btn"
+        onclick="window.closeAvatarWidget()"
+        aria-label="Cerrar avatar"
+        title="Cerrar avatar">
+        &times;
+      </button>
+    </header>
+
+    <div id="configuration" class="avatar-configuration">
+      <section class="config-section">
+        <h2>Azure Speech Resource</h2>
+        <label for="region">Region</label>
+        <select id="region">
+          <option value="westus2">West US 2</option>
+          <option value="westeurope">West Europe</option>
+          <option value="southeastasia">Southeast Asia</option>
+          <option value="southcentralus">South Central US</option>
+          <option value="northeurope">North Europe</option>
+          <option value="swedencentral">Sweden Central</option>
+          <option value="eastus2">East US 2</option>
+        </select>
+
+        <label for="APIKey">API Key</label>
+        <input id="APIKey" type="password" size="32" />
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="enablePrivateEndpoint" onchange="window.updatePrivateEndpoint()">
+          Enable Private Endpoint
+        </label>
+        <div id="showPrivateEndpointCheckBox" hidden="hidden">
+          <label for="privateEndpoint">Private Endpoint</label>
+          <input id="privateEndpoint" type="text" size="64" placeholder="https://{your custom name}.cognitiveservices.azure.com/">
+        </div>
+      </section>
+
+      <section class="config-section">
+        <h2>Journey Builder Flow Resource</h2>
+        <label for="jbApiBaseUrl">JB API Base URL</label>
+        <input id="jbApiBaseUrl" type="text" size="64" placeholder="https://api.tu-dominio.com">
+
+        <label for="jbFlowId">Flow ID</label>
+        <input id="jbFlowId" type="text" size="64">
+
+        <label for="jbApiKey">API Key</label>
+        <input id="jbApiKey" type="password" size="32">
+
+        <label for="prompt">Contexto inicial (opcional)</label>
+        <textarea id="prompt">Sos un asistente virtual que responde usando el flujo de Journey Builder configurado.</textarea>
+      </section>
+
+      <section class="config-section">
+        <h2>STT / TTS Configuration</h2>
+        <label for="sttLocales">STT Locale(s)</label>
+        <input id="sttLocales" type="text" size="64" value="en-US,de-DE,es-ES,fr-FR,it-IT,ja-JP,ko-KR,zh-CN">
+
+        <label for="ttsVoice">TTS Voice</label>
+        <input id="ttsVoice" type="text" size="32" value="en-US-AvaMultilingualNeural">
+
+        <label for="customVoiceEndpointId">Custom Voice Deployment ID (Endpoint ID)</label>
+        <input id="customVoiceEndpointId" type="text" size="32" value="">
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="continuousConversation">
+          Continuous Conversation
+        </label>
+      </section>
+
+      <section class="config-section">
+        <h2>Avatar Configuration</h2>
+        <label for="talkingAvatarCharacter">Avatar Character</label>
+        <input id="talkingAvatarCharacter" type="text" size="16" value="lisa">
+
+        <label for="talkingAvatarStyle">Avatar Style</label>
+        <input id="talkingAvatarStyle" type="text" size="16" value="casual-sitting">
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="customizedAvatar" onchange="window.updateCustomAvatarBox()">
+          Custom Avatar
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="useBuiltInVoice" disabled>
+          Use Built-In Voice
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="autoReconnectAvatar">
+          Auto Reconnect
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="useLocalVideoForIdle" onchange="window.updateLocalVideoForIdle()">
+          Use Local Video for Idle
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="showSubtitles">
+          Show Subtitles
+        </label>
+      </section>
+    </div>
+
+    <div class="avatar-controls" hidden>
+      <button id="startSession" onclick="window.startSession()" hidden>Abrir avatar</button>
+      <button id="stopSession" onclick="window.stopSession()" disabled hidden>Cerrar avatar</button>
+      <button id="stopSpeaking" onclick="stopSpeaking()" disabled hidden>Detener voz</button>
+      <button id="clearChatHistory" onclick="window.clearChatHistory()" hidden>Limpiar chat</button>
+      <button id="microphone" onclick="window.microphone()" disabled hidden>Micrófono automático</button>
+    </div>
+    <div id="sessionHint" class="avatar-session-hint">
+      Abrir avatar crea una sesión nueva. Cerrar avatar finaliza la sesión actual.
+    </div>
+    <div id="autoMicStatus" class="avatar-mic-hint">
+      Micrófono automático en espera de voz.
+    </div>
+
+    <div id="videoContainer">
+      <div id="overlayArea">
+        <div id="chatHistory" contentEditable="true" hidden></div>
+      </div>
+      <div id="localVideo" hidden>
+        <video id="localVideoPlayer" autoplay loop muted playsinline></video>
+      </div>
+      <div id="remoteVideo"></div>
+      <div id="subtitles" hidden></div>
+    </div>
+
+    <div class="composer-area" hidden>
+      <div id="showTypeMessageCheckbox">
+        <label class="checkbox-row">
+          <input type="checkbox" id="showTypeMessage" onchange="window.updateTypeMessageBox()" disabled hidden>
+          Type Message
+        </label>
+      </div>
+      <div id="userMessageBox" hidden type="text" contentEditable="true"></div>
+      <div class="upload-wrapper">
+        <img id="uploadImgIcon" src="./image/attachment.jpg" alt="Button" hidden />
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
