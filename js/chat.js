@@ -121,10 +121,10 @@ function syncWidgetIframeFrame(open) {
         frame.style.bottom = 'max(8px, 2vw)'
 
         if (open) {
-            frame.width = '420'
-            frame.height = '740'
-            frame.style.width = 'clamp(300px, calc(100vw - 16px), 420px)'
-            frame.style.height = 'clamp(460px, calc(100vh - 16px), 620px)'
+            frame.width = '360'
+            frame.height = '640'
+            frame.style.width = 'clamp(280px, calc(100vw - 16px), 360px)'
+            frame.style.height = 'clamp(420px, calc(100vh - 16px), 560px)'
             frame.style.borderRadius = '16px'
             frame.style.boxShadow = '0 20px 40px rgba(0,0,0,0.22)'
             return
