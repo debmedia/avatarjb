@@ -379,7 +379,7 @@ body.avatar-page.avatar-widget-mode .avatar-fab {
   height: 64px;
   border-radius: 999px;
   border: 0;
-  background: linear-gradient(135deg, #0f5fff 0%, #1f8dff 100%);
+  background: linear-gradient(135deg, #8b4dff 0%, #6d37f6 100%);
   color: #ffffff;
   align-items: center;
   justify-content: center;
@@ -394,8 +394,16 @@ body.avatar-page.avatar-widget-mode .avatar-fab-mark {
   pointer-events: none;
 }
 
+body.avatar-page.avatar-widget-mode .avatar-fab-logo {
+  width: 30px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 body.avatar-page.avatar-widget-mode .avatar-fab:hover {
-  background: linear-gradient(135deg, #0a4bd1 0%, #0f75e6 100%);
+  background: linear-gradient(135deg, #7a3af4 0%, #5d27e8 100%);
 }
 
 body.avatar-page.avatar-widget-mode.avatar-widget-open .avatar-fab {
