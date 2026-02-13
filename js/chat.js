@@ -1296,8 +1296,25 @@ function checkLastSpeak() {
     }
 }
 
+function getEmbedQueryParams() {
+    const search = String(window.location.search || '').trim()
+    if (search !== '') {
+        return new URLSearchParams(search)
+    }
+
+    const embeddedQuery = window.__JB_AVATAR_QUERY__
+    if (typeof embeddedQuery === 'string' && embeddedQuery.trim() !== '') {
+        const normalizedQuery = embeddedQuery.trim().startsWith('?')
+            ? embeddedQuery.trim()
+            : `?${embeddedQuery.trim()}`
+        return new URLSearchParams(normalizedQuery)
+    }
+
+    return new URLSearchParams()
+}
+
 function loadJourneyBuilderParamsFromUrl() {
-    const query = new URLSearchParams(window.location.search)
+    const query = getEmbedQueryParams()
     const view = query.get('view') || query.get('mode')
     const widget = query.get('widget')
     const flowId = query.get('flowId') || query.get('flow_id')
