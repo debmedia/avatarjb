@@ -436,21 +436,25 @@ function buildAvatarSpeechSessionEndpoint(hostUrl) {
         return ''
     }
 
-    if (normalizedHostUrl.includes('/api/v1/avatar/speech-session')) {
+    if (normalizedHostUrl.includes('/api/v1/external/avatar/speech-session')) {
         return normalizedHostUrl
+    }
+
+    if (normalizedHostUrl.includes('/api/v1/avatar/speech-session')) {
+        return normalizedHostUrl.replace('/api/v1/avatar/speech-session', '/api/v1/external/avatar/speech-session')
     }
 
     if (normalizedHostUrl.includes('/api/v1/run/')) {
         const runSegmentIndex = normalizedHostUrl.indexOf('/api/v1/run/')
         const baseUrl = normalizedHostUrl.slice(0, runSegmentIndex)
-        return `${baseUrl}/api/v1/avatar/speech-session`
+        return baseUrl + '/api/v1/external/avatar/speech-session'
     }
 
     if (normalizedHostUrl.endsWith('/api/v1')) {
-        return `${normalizedHostUrl}/avatar/speech-session`
+        return normalizedHostUrl + '/external/avatar/speech-session'
     }
 
-    return `${normalizedHostUrl}/api/v1/avatar/speech-session`
+    return normalizedHostUrl + '/api/v1/external/avatar/speech-session'
 }
 
 function buildAzureRelayTokenUrl(cogSvcRegion, privateEndpointHost) {
@@ -981,15 +985,20 @@ function getJourneyBuilderConfig() {
 }
 
 function buildJourneyBuilderRunEndpoint(hostUrl, flowId) {
+    const streamQuery = 'stream=true'
+
     if (hostUrl.includes('/api/v1/run/')) {
-        return hostUrl.includes('?') ? `${hostUrl}&stream=false` : `${hostUrl}?stream=false`
+        if (/([?&])stream=/.test(hostUrl)) {
+            return hostUrl.replace(/([?&])stream=[^&]*/g, `$1${streamQuery}`)
+        }
+        return hostUrl.includes('?') ? `${hostUrl}&${streamQuery}` : `${hostUrl}?${streamQuery}`
     }
 
     if (hostUrl.endsWith('/api/v1')) {
-        return `${hostUrl}/run/${flowId}?stream=false`
+        return `${hostUrl}/run/${flowId}?${streamQuery}`
     }
 
-    return `${hostUrl}/api/v1/run/${flowId}?stream=false`
+    return `${hostUrl}/api/v1/run/${flowId}?${streamQuery}`
 }
 
 function extractTextFromJourneyBuilderResponse(responseData) {
@@ -1044,6 +1053,204 @@ function extractTextFromJourneyBuilderResponse(responseData) {
     }
 
     return ''
+}
+
+function extractTextFromJourneyBuilderTokenEvent(streamEvent) {
+    if (
+        !streamEvent ||
+        typeof streamEvent !== 'object' ||
+        streamEvent.event !== 'token' ||
+        streamEvent.data === null ||
+        streamEvent.data === undefined
+    ) {
+        return ''
+    }
+
+    if (typeof streamEvent.data === 'string') {
+        return streamEvent.data
+    }
+
+    if (typeof streamEvent.data === 'object') {
+        if (typeof streamEvent.data.chunk === 'string') {
+            return streamEvent.data.chunk
+        }
+        if (typeof streamEvent.data.text === 'string') {
+            return streamEvent.data.text
+        }
+    }
+
+    return ''
+}
+
+function parseJourneyBuilderStreamFrame(rawFrame) {
+    const parsedEvents = []
+    const frameLines = rawFrame
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '')
+    let sseEventName = ''
+
+    for (const line of frameLines) {
+        if (line.startsWith('event:')) {
+            sseEventName = line.slice(6).trim()
+            continue
+        }
+
+        const payload = line.startsWith('data:') ? line.slice(5).trim() : line
+        if (!payload || payload === '[DONE]') {
+            continue
+        }
+
+        try {
+            const parsed = JSON.parse(payload)
+            if (
+                sseEventName &&
+                parsed &&
+                typeof parsed === 'object' &&
+                !Array.isArray(parsed) &&
+                !('event' in parsed)
+            ) {
+                parsed.event = sseEventName
+            }
+            parsedEvents.push(parsed)
+        } catch (error) {
+            console.warn('Unable to parse Journey Builder stream payload.', payload, error)
+        }
+    }
+
+    return parsedEvents
+}
+
+async function readJourneyBuilderStreamResponse(response, chatHistoryTextArea) {
+    if (!response.body || typeof response.body.getReader !== 'function') {
+        return {
+            assistantReply: '',
+            renderedIncrementally: false
+        }
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let chunkBuffer = ''
+    let assistantReply = ''
+    let fallbackReply = ''
+    let renderedIncrementally = false
+    let receivedTokenEvent = false
+    const addMessageStateById = new Map()
+
+    const appendAssistantTextChunk = (textChunk) => {
+        if (!textChunk) {
+            return
+        }
+        chatHistoryTextArea.innerHTML += textChunk.replace(/\n/g, '<br/>')
+        chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+    }
+
+    const processStreamFrame = (rawFrame) => {
+        const parsedEvents = parseJourneyBuilderStreamFrame(rawFrame)
+        for (const streamEvent of parsedEvents) {
+            if (!streamEvent || typeof streamEvent !== 'object') {
+                continue
+            }
+
+            const eventType = streamEvent.event
+            if (eventType === 'error') {
+                const errorDetails = extractTextFromJourneyBuilderResponse(streamEvent.data) || 'Unknown stream error'
+                throw new Error(`Journey Builder stream error: ${errorDetails}`)
+            }
+
+            if (eventType === 'token') {
+                const tokenText = extractTextFromJourneyBuilderTokenEvent(streamEvent)
+                if (tokenText) {
+                    receivedTokenEvent = true
+                    renderedIncrementally = true
+                    assistantReply += tokenText
+                    appendAssistantTextChunk(tokenText)
+                }
+                continue
+            }
+
+            if (eventType === 'end') {
+                const endReply = extractTextFromJourneyBuilderResponse(streamEvent.data?.result ?? streamEvent.data)
+                if (endReply) {
+                    fallbackReply = endReply
+                }
+                continue
+            }
+
+            if (eventType === 'add_message') {
+                const addMessageData = streamEvent.data && typeof streamEvent.data === 'object' ? streamEvent.data : null
+                const addMessageReply = addMessageData && typeof addMessageData.text === 'string' ? addMessageData.text : ''
+                if (!addMessageReply) {
+                    continue
+                }
+
+                fallbackReply = addMessageReply
+
+                // If token events are present, they are the canonical stream chunks.
+                if (receivedTokenEvent) {
+                    continue
+                }
+
+                // Ignore user echo events, keep only assistant-side message deltas.
+                const sender = String(addMessageData.sender || '').toLowerCase()
+                const senderName = String(addMessageData.sender_name || '').toLowerCase()
+                if (sender === 'user' || senderName === 'user') {
+                    continue
+                }
+
+                const messageId = addMessageData.id || '__default__'
+                const previousText = addMessageStateById.get(messageId) || ''
+                addMessageStateById.set(messageId, addMessageReply)
+
+                let textDelta = ''
+                if (addMessageReply.startsWith(previousText)) {
+                    textDelta = addMessageReply.slice(previousText.length)
+                } else if (!previousText.startsWith(addMessageReply)) {
+                    textDelta = addMessageReply
+                }
+
+                if (textDelta) {
+                    renderedIncrementally = true
+                    assistantReply += textDelta
+                    appendAssistantTextChunk(textDelta)
+                }
+            }
+        }
+    }
+
+    while (true) {
+        const { value, done } = await reader.read()
+        if (done) {
+            break
+        }
+
+        chunkBuffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+        const frames = chunkBuffer.split('\n\n')
+        chunkBuffer = frames.pop() || ''
+        for (const frame of frames) {
+            if (frame.trim() !== '') {
+                processStreamFrame(frame)
+            }
+        }
+    }
+
+    const finalChunk = decoder.decode().replace(/\r\n/g, '\n')
+    if (finalChunk) {
+        chunkBuffer += finalChunk
+    }
+    if (chunkBuffer.trim() !== '') {
+        processStreamFrame(chunkBuffer)
+    }
+
+    if (!assistantReply && fallbackReply) {
+        assistantReply = fallbackReply
+    }
+
+    return {
+        assistantReply,
+        renderedIncrementally
+    }
 }
 
 // Do HTML encoding on given text
@@ -1212,20 +1419,31 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
         headers: requestHeaders,
         body: JSON.stringify(requestBody)
     })
-        .then(response => {
+        .then(async (response) => {
             if (!response.ok) {
                 throw new Error(`Journey Builder API response status: ${response.status} ${response.statusText}`)
             }
-            return response.json()
+
+            const contentType = (response.headers.get('content-type') || '').toLowerCase()
+            if (contentType.includes('text/event-stream')) {
+                return readJourneyBuilderStreamResponse(response, chatHistoryTextArea)
+            }
+
+            const data = await response.json()
+            return {
+                assistantReply: extractTextFromJourneyBuilderResponse(data),
+                renderedIncrementally: false
+            }
         })
-        .then(data => {
-            let assistantReply = extractTextFromJourneyBuilderResponse(data)
+        .then(({ assistantReply, renderedIncrementally }) => {
             if (!assistantReply) {
                 assistantReply = 'No se pudo obtener una respuesta del flujo.'
             }
 
-            chatHistoryTextArea.innerHTML += assistantReply.replace(/\n/g, '<br/>')
-            chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+            if (!renderedIncrementally) {
+                chatHistoryTextArea.innerHTML += assistantReply.replace(/\n/g, '<br/>')
+                chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+            }
 
             if (!enableDisplayTextAlignmentWithSpeech) {
                 chatHistoryTextArea.innerHTML += '<br/>'
