@@ -1,6 +1,7 @@
 (function () {
   var DEFAULT_FRAME_STYLE =
     "border:0; border-radius:0; position:fixed; right:max(8px,2vw); bottom:max(8px,2vw); z-index:999999; background:transparent; box-shadow:none; overflow:hidden;";
+  var EMBED_TAG = "journey-builder-avatar";
 
   function stripQueryAndHash(url) {
     var raw = String(url || "");
@@ -24,8 +25,7 @@
     );
   }
 
-  function buildAvatarUrls(scriptUrl) {
-    var params = new URLSearchParams(scriptUrl.search);
+  function buildAvatarUrls(params, scriptUrl) {
     var explicitChatUrl = params.get("chatUrl") || params.get("chat_url");
     var chatHtmlUrl = explicitChatUrl
       ? stripQueryAndHash(explicitChatUrl)
@@ -53,6 +53,66 @@
     };
   }
 
+  function getAttributeValue(element, names) {
+    for (var i = 0; i < names.length; i += 1) {
+      var value = element.getAttribute(names[i]);
+      if (value !== null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function mergeElementParams(baseParams, element) {
+    var merged = new URLSearchParams(baseParams.toString());
+    var paramMappings = [
+      { keys: ["flow_id", "flow-id", "flowId"], param: "flowId" },
+      { keys: ["host_url", "host-url", "hostUrl"], param: "hostUrl" },
+      { keys: ["api_key", "api-key", "apiKey"], param: "apiKey" },
+      { keys: ["prompt"], param: "prompt" },
+      { keys: ["speech_region", "speech-region", "speechRegion"], param: "speechRegion" },
+      { keys: ["speech_api_key", "speech-api-key", "speechApiKey"], param: "speechApiKey" },
+      {
+        keys: ["speech_private_endpoint", "speech-private-endpoint", "speechPrivateEndpoint"],
+        param: "speechPrivateEndpoint",
+      },
+      { keys: ["tts_voice", "tts-voice", "ttsVoice"], param: "ttsVoice" },
+      { keys: ["avatar_character", "avatar-character", "avatarCharacter"], param: "avatarCharacter" },
+      { keys: ["avatar_style", "avatar-style", "avatarStyle"], param: "avatarStyle" },
+      { keys: ["auto_start", "auto-start", "autoStart"], param: "autoStart" },
+      { keys: ["view"], param: "view" },
+      { keys: ["v"], param: "v" },
+      { keys: ["chat_url", "chat-url", "chatUrl"], param: "chatUrl" },
+    ];
+
+    paramMappings.forEach(function (mapping) {
+      var value = getAttributeValue(element, mapping.keys);
+      if (value !== null) {
+        merged.set(mapping.param, value);
+      }
+    });
+
+    return merged;
+  }
+
+  function getIframeConfig(scriptUrl, element) {
+    var getParamOrAttr = function (queryKey, attrNames, fallbackValue) {
+      var attrValue = element ? getAttributeValue(element, attrNames) : null;
+      if (attrValue !== null) {
+        return attrValue;
+      }
+      return scriptUrl.searchParams.get(queryKey) || fallbackValue;
+    };
+
+    return {
+      title: getParamOrAttr("title", ["title"], "Journey Builder Avatar"),
+      width: getParamOrAttr("width", ["width"], "84"),
+      height: getParamOrAttr("height", ["height"], "84"),
+      allow: getParamOrAttr("allow", ["allow"], "microphone"),
+      style: getParamOrAttr("style", ["style"], DEFAULT_FRAME_STYLE),
+    };
+  }
+
   function patchHtml(html, assetBaseUrl, queryString) {
     var hasBaseTag = /<base\s/i.test(html);
     var baseTag = hasBaseTag ? "" : '<base href="' + assetBaseUrl + '">';
@@ -76,24 +136,32 @@
     return bootstrap + html;
   }
 
-  function createIframe(scriptTag, scriptUrl) {
-    var params = scriptUrl.searchParams;
+  function createIframe(scriptTag, iframeConfig, targetElement) {
     var iframe = document.createElement("iframe");
 
-    iframe.setAttribute("title", params.get("title") || "Journey Builder Avatar");
-    iframe.setAttribute("width", params.get("width") || "84");
-    iframe.setAttribute("height", params.get("height") || "84");
-    iframe.setAttribute("allow", params.get("allow") || "microphone");
-    iframe.style.cssText = params.get("style") || DEFAULT_FRAME_STYLE;
+    iframe.setAttribute("title", iframeConfig.title);
+    iframe.setAttribute("width", iframeConfig.width);
+    iframe.setAttribute("height", iframeConfig.height);
+    iframe.setAttribute("allow", iframeConfig.allow);
+    iframe.style.cssText = iframeConfig.style;
 
-    scriptTag.parentNode.insertBefore(iframe, scriptTag);
+    if (targetElement && targetElement.parentNode) {
+      targetElement.parentNode.replaceChild(iframe, targetElement);
+    } else {
+      scriptTag.parentNode.insertBefore(iframe, scriptTag);
+    }
     return iframe;
   }
 
-  function mount(scriptTag) {
+  function mount(scriptTag, targetElement) {
     var scriptUrl = new URL(scriptTag.src, window.location.href);
-    var iframe = createIframe(scriptTag, scriptUrl);
-    var avatarUrls = buildAvatarUrls(scriptUrl);
+    var baseParams = new URLSearchParams(scriptUrl.search);
+    var mergedParams = targetElement
+      ? mergeElementParams(baseParams, targetElement)
+      : baseParams;
+    var iframeConfig = getIframeConfig(scriptUrl, targetElement);
+    var iframe = createIframe(scriptTag, iframeConfig, targetElement);
+    var avatarUrls = buildAvatarUrls(mergedParams, scriptUrl);
 
     if (!isJsDelivrHtmlUrl(avatarUrls.chatHtmlUrl)) {
       iframe.setAttribute("src", avatarUrls.avatarUrl);
@@ -125,7 +193,15 @@
       return;
     }
 
-    mount(scriptTag);
+    var embedTargets = document.querySelectorAll(EMBED_TAG);
+    if (!embedTargets.length) {
+      mount(scriptTag, null);
+      return;
+    }
+
+    Array.prototype.forEach.call(embedTargets, function (targetElement) {
+      mount(scriptTag, targetElement);
+    });
   } catch (error) {
     console.error("[Journey Builder Avatar] Unable to initialize embed:", error);
   }
