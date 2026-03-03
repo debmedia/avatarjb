@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Journey Builder Avatar</title>
-    <link href="./css/styles.css?v=20260303c" rel="stylesheet">
+    <link href="./css/styles.css?v=20260303e" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-    <script src="./js/chat.js?v=20260303c"></script>
+    <script src="./js/chat.js?v=20260303e"></script>
 </head>
 <body class="avatar-page">
   <button
@@ -13,9 +13,17 @@
     class="avatar-fab"
     onclick="window.toggleAvatarWidget()"
     aria-expanded="false"
-    aria-label="Llamar avatar"
-    title="Llamar avatar">
-    Llamar
+    aria-label="Reiniciar conversación"
+    title="Reiniciar conversación">
+    Reiniciar conversación
+  </button>
+  <button
+    id="avatarMute"
+    class="avatar-mute-btn"
+    onclick="window.toggleAvatarMute()"
+    aria-label="Mutear micrófono"
+    title="Mutear micrófono">
+    Mutear
   </button>
 
   <div id="avatarWidgetShell" class="avatar-widget-shell" aria-hidden="true">
