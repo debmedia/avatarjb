@@ -501,7 +501,8 @@ body.avatar-page.avatar-widget-mode.avatar-callbox-mode #remoteVideo video,
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode #localVideo video {
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center center;
   background: #0b1220;
 }
 
