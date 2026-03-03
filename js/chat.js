@@ -430,31 +430,48 @@ function normalizeEndpointHost(rawValue) {
     }
 }
 
-function buildAvatarSpeechSessionEndpoint(hostUrl) {
+function buildAvatarSpeechSessionEndpoints(hostUrl) {
     const normalizedHostUrl = String(hostUrl || '').trim().replace(/\/+$/, '')
     if (normalizedHostUrl === '') {
-        return ''
+        return []
+    }
+
+    const dedupe = (items) => Array.from(new Set(items.filter((item) => item && item.trim() !== '')))
+
+    if (normalizedHostUrl.includes('/api/v1/avatar/speech-session')) {
+        return dedupe([
+            normalizedHostUrl,
+            normalizedHostUrl.replace('/api/v1/avatar/speech-session', '/api/v1/external/avatar/speech-session'),
+        ])
     }
 
     if (normalizedHostUrl.includes('/api/v1/external/avatar/speech-session')) {
-        return normalizedHostUrl
-    }
-
-    if (normalizedHostUrl.includes('/api/v1/avatar/speech-session')) {
-        return normalizedHostUrl.replace('/api/v1/avatar/speech-session', '/api/v1/external/avatar/speech-session')
+        return dedupe([
+            normalizedHostUrl,
+            normalizedHostUrl.replace('/api/v1/external/avatar/speech-session', '/api/v1/avatar/speech-session'),
+        ])
     }
 
     if (normalizedHostUrl.includes('/api/v1/run/')) {
         const runSegmentIndex = normalizedHostUrl.indexOf('/api/v1/run/')
         const baseUrl = normalizedHostUrl.slice(0, runSegmentIndex)
-        return baseUrl + '/api/v1/external/avatar/speech-session'
+        return dedupe([
+            baseUrl + '/api/v1/avatar/speech-session',
+            baseUrl + '/api/v1/external/avatar/speech-session',
+        ])
     }
 
     if (normalizedHostUrl.endsWith('/api/v1')) {
-        return normalizedHostUrl + '/external/avatar/speech-session'
+        return dedupe([
+            normalizedHostUrl + '/avatar/speech-session',
+            normalizedHostUrl + '/external/avatar/speech-session',
+        ])
     }
 
-    return normalizedHostUrl + '/api/v1/external/avatar/speech-session'
+    return dedupe([
+        normalizedHostUrl + '/api/v1/avatar/speech-session',
+        normalizedHostUrl + '/api/v1/external/avatar/speech-session',
+    ])
 }
 
 function buildAzureRelayTokenUrl(cogSvcRegion, privateEndpointHost) {
@@ -483,8 +500,8 @@ function parseAndValidateRelayTokenPayload(relayPayload) {
 }
 
 async function fetchAvatarSpeechSession(hostUrl, jbApiKey) {
-    const endpoint = buildAvatarSpeechSessionEndpoint(hostUrl)
-    if (endpoint === '') {
+    const endpoints = buildAvatarSpeechSessionEndpoints(hostUrl)
+    if (endpoints.length === 0) {
         throw new Error('JB API Base URL is required to request avatar speech session.')
     }
 
@@ -493,18 +510,26 @@ async function fetchAvatarSpeechSession(hostUrl, jbApiKey) {
         requestHeaders['x-api-key'] = jbApiKey.trim()
     }
 
-    const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: requestHeaders,
-    })
-    if (!response.ok) {
+    let lastResponseError = ''
+    for (const endpoint of endpoints) {
+        const response = await fetch(endpoint, {
+            method: 'GET',
+            headers: requestHeaders,
+        })
+        if (response.ok) {
+            return await response.json()
+        }
+
         const responseText = await response.text()
-        throw new Error(
-            `Journey Builder avatar speech session request failed (HTTP ${response.status}). ${responseText}`
-        )
+        lastResponseError = `${endpoint} -> HTTP ${response.status}. ${responseText}`
+        if (response.status !== 404) {
+            throw new Error(`Journey Builder avatar speech session request failed (${lastResponseError})`)
+        }
     }
 
-    return await response.json()
+    throw new Error(
+        `Journey Builder avatar speech session request failed on all known endpoints. Last attempt: ${lastResponseError}`
+    )
 }
 
 async function fetchAvatarRelayTokenFromAzure(cogSvcRegion, cogSvcSubKey, privateEndpointHost) {
