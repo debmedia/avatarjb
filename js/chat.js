@@ -26,6 +26,7 @@ var isConnecting = false
 var isWidgetMode = false
 var widgetOpen = false
 var isMinimalWidgetCallbox = true
+var hasSentAutoHelloForSession = false
 var isMicrophoneListening = false
 var autoMicStream = null
 var autoMicAudioContext = null
@@ -72,7 +73,19 @@ function setCallToggleState() {
     }
 
     const hasLiveSession = sessionActive || avatarSynthesizer !== undefined
+    const isCallVisible = isConnecting || hasLiveSession
+
+    if (isMinimalWidgetCallbox) {
+        document.body.classList.toggle('avatar-call-active', isCallVisible)
+        const shell = document.getElementById('avatarWidgetShell')
+        if (shell !== null) {
+            shell.setAttribute('aria-hidden', isCallVisible ? 'false' : 'true')
+        }
+        syncWidgetIframeFrame(widgetOpen)
+    }
+
     fab.classList.remove('call-active', 'call-connecting')
+    fab.setAttribute('aria-expanded', isCallVisible ? 'true' : 'false')
 
     if (isConnecting) {
         fab.disabled = true
@@ -154,6 +167,18 @@ function syncWidgetIframeFrame(open) {
         frame.style.bottom = 'max(8px, 2vw)'
 
         if (isMinimalWidgetCallbox) {
+            const hasLiveSession = sessionActive || avatarSynthesizer !== undefined
+            const isCallVisible = isConnecting || hasLiveSession
+            if (isCallVisible) {
+                frame.width = '340'
+                frame.height = '520'
+                frame.style.width = 'clamp(280px, calc(100vw - 16px), 340px)'
+                frame.style.height = 'clamp(360px, calc(100vh - 16px), 520px)'
+                frame.style.borderRadius = '16px'
+                frame.style.boxShadow = '0 20px 40px rgba(0,0,0,0.22)'
+                return
+            }
+
             frame.width = '176'
             frame.height = '64'
             frame.style.width = '176px'
@@ -191,7 +216,13 @@ function setWidgetOpenState(open) {
 
     const shell = document.getElementById('avatarWidgetShell')
     if (shell !== null) {
-        shell.setAttribute('aria-hidden', open ? 'false' : 'true')
+        if (isWidgetMode && isMinimalWidgetCallbox) {
+            const hasLiveSession = sessionActive || avatarSynthesizer !== undefined
+            const isCallVisible = isConnecting || hasLiveSession
+            shell.setAttribute('aria-hidden', isCallVisible ? 'false' : 'true')
+        } else {
+            shell.setAttribute('aria-hidden', open ? 'false' : 'true')
+        }
     }
 
     const fab = document.getElementById('avatarFab')
@@ -252,6 +283,7 @@ function resetSessionUi() {
     document.getElementById('localVideo').hidden = true
     isReconnecting = false
     stopAutoMicrophoneDetection()
+    hasSentAutoHelloForSession = false
     setSessionHint('Abrir avatar crea una sesión nueva. Cerrar avatar finaliza la sesión actual.')
     setAutoMicStatus('Micrófono automático en espera de voz.')
     setWidgetStatus('Listo para iniciar')
@@ -1848,6 +1880,7 @@ window.clearChatHistory = () => {
     document.getElementById('chatHistory').innerHTML = ''
     const flowId = document.getElementById('jbFlowId').value.trim() || 'flow'
     journeyBuilderSessionId = `avatar-${flowId}-${Date.now()}`
+    hasSentAutoHelloForSession = false
     initMessages()
     messageInitiated = true
 }
@@ -1916,6 +1949,10 @@ window.microphone = (autoTriggered = false) => {
             isMicrophoneListening = true
             setMicrophoneUiState(true, false)
             setAutoMicStatus('Micrófono automático escuchando.')
+            if (!hasSentAutoHelloForSession) {
+                hasSentAutoHelloForSession = true
+                handleUserQuery('hola', '', '')
+            }
         }, (err) => {
             console.log("Failed to start continuous recognition:", err)
             isMicrophoneListening = false
