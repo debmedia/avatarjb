@@ -1161,6 +1161,281 @@ function buildJourneyBuilderRunEndpoint(hostUrl, flowId) {
     return `${hostUrl}/api/v1/run/${flowId}?${streamQuery}`
 }
 
+const STRUCTURED_RESPONSE_PRIMARY_KEYS = ['respuesta', 'response', 'answer']
+const STRUCTURED_RESPONSE_TEXT_KEYS = [
+    ...STRUCTURED_RESPONSE_PRIMARY_KEYS,
+    'texto',
+    'text',
+    'message',
+    'mensaje'
+]
+const STRUCTURED_RESPONSE_UI_KEYS = ['form', 'forms', 'button', 'buttons', 'buttoms', 'html']
+
+function tryParseJsonString(value) {
+    if (typeof value !== 'string') {
+        return null
+    }
+
+    const trimmed = value.trim()
+    if (trimmed === '' || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+        return null
+    }
+
+    try {
+        return JSON.parse(trimmed)
+    } catch (error) {
+        return null
+    }
+}
+
+function sanitizeAssistantHtml(htmlFragment) {
+    if (typeof htmlFragment !== 'string') {
+        return ''
+    }
+
+    return htmlFragment
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\sjavascript:/gi, '')
+}
+
+function stripHtmlTags(value) {
+    if (typeof value !== 'string') {
+        return ''
+    }
+
+    return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function isStructuredButtonKey(key) {
+    return key === 'button' || key === 'buttons' || key === 'buttoms'
+}
+
+function findStructuredAssistantPayload(responseData, depth = 0) {
+    if (responseData === null || responseData === undefined || depth > 8) {
+        return null
+    }
+
+    if (typeof responseData === 'string') {
+        const parsedString = tryParseJsonString(responseData)
+        if (parsedString === null) {
+            return null
+        }
+        return findStructuredAssistantPayload(parsedString, depth + 1)
+    }
+
+    if (Array.isArray(responseData)) {
+        for (const item of responseData) {
+            const foundPayload = findStructuredAssistantPayload(item, depth + 1)
+            if (foundPayload !== null) {
+                return foundPayload
+            }
+        }
+        return null
+    }
+
+    if (typeof responseData === 'object') {
+        const hasPrimaryKey = STRUCTURED_RESPONSE_PRIMARY_KEYS.some((key) => key in responseData)
+        const hasUiKey = STRUCTURED_RESPONSE_UI_KEYS.some((key) => key in responseData)
+        if (hasPrimaryKey || hasUiKey) {
+            return responseData
+        }
+
+        const priorityKeys = ['data', 'result', 'results', 'output', 'outputs', 'message']
+        for (const key of priorityKeys) {
+            if (key in responseData) {
+                const nestedPayload = findStructuredAssistantPayload(responseData[key], depth + 1)
+                if (nestedPayload !== null) {
+                    return nestedPayload
+                }
+            }
+        }
+
+        for (const value of Object.values(responseData)) {
+            const nestedPayload = findStructuredAssistantPayload(value, depth + 1)
+            if (nestedPayload !== null) {
+                return nestedPayload
+            }
+        }
+    }
+
+    return null
+}
+
+function extractStructuredResponseTextFromValue(value, depth = 0) {
+    if (value === null || value === undefined || depth > 8) {
+        return ''
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed === '') {
+            return ''
+        }
+
+        const parsedValue = tryParseJsonString(trimmed)
+        if (parsedValue !== null) {
+            const nestedText = extractStructuredResponseText(parsedValue, depth + 1)
+            if (nestedText !== '') {
+                return nestedText
+            }
+            return extractTextFromJourneyBuilderResponse(parsedValue).trim()
+        }
+
+        return trimmed
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const nestedText = extractStructuredResponseTextFromValue(item, depth + 1)
+            if (nestedText !== '') {
+                return nestedText
+            }
+        }
+        return ''
+    }
+
+    if (typeof value === 'object') {
+        const nestedText = extractStructuredResponseText(value, depth + 1)
+        if (nestedText !== '') {
+            return nestedText
+        }
+        return extractTextFromJourneyBuilderResponse(value).trim()
+    }
+
+    return ''
+}
+
+function extractStructuredResponseText(structuredPayload, depth = 0) {
+    if (!structuredPayload || typeof structuredPayload !== 'object' || depth > 8) {
+        return ''
+    }
+
+    for (const key of STRUCTURED_RESPONSE_TEXT_KEYS) {
+        if (!(key in structuredPayload)) {
+            continue
+        }
+
+        const extractedText = extractStructuredResponseTextFromValue(structuredPayload[key], depth + 1)
+        if (extractedText !== '') {
+            return extractedText
+        }
+    }
+
+    return ''
+}
+
+function renderStructuredUiBlock(blockValue, blockKey, depth = 0) {
+    if (blockValue === null || blockValue === undefined || depth > 8) {
+        return ''
+    }
+
+    if (typeof blockValue === 'string') {
+        const trimmed = blockValue.trim()
+        if (trimmed === '') {
+            return ''
+        }
+
+        const parsedValue = tryParseJsonString(trimmed)
+        if (parsedValue !== null) {
+            return renderStructuredUiBlock(parsedValue, blockKey, depth + 1)
+        }
+
+        return sanitizeAssistantHtml(trimmed)
+    }
+
+    if (Array.isArray(blockValue)) {
+        const renderedItems = blockValue
+            .map((item) => renderStructuredUiBlock(item, blockKey, depth + 1))
+            .filter((item) => item !== '')
+        if (renderedItems.length === 0) {
+            return ''
+        }
+
+        if (isStructuredButtonKey(blockKey)) {
+            return `<div class="assistant-response-buttons">${renderedItems.join('')}</div>`
+        }
+
+        return renderedItems.join('')
+    }
+
+    if (typeof blockValue === 'object') {
+        if (isStructuredButtonKey(blockKey)) {
+            const buttonLabel = String(
+                blockValue.label || blockValue.text || blockValue.title || blockValue.value || ''
+            ).trim()
+            if (buttonLabel !== '') {
+                return `<button type="button" class="assistant-response-button" disabled>${htmlEncode(buttonLabel)}</button>`
+            }
+        }
+
+        for (const nestedKey of ['html', 'markup', 'template']) {
+            if (typeof blockValue[nestedKey] === 'string' && blockValue[nestedKey].trim() !== '') {
+                return sanitizeAssistantHtml(blockValue[nestedKey].trim())
+            }
+        }
+
+        const renderedValues = Object.values(blockValue)
+            .map((item) => renderStructuredUiBlock(item, blockKey, depth + 1))
+            .filter((item) => item !== '')
+        return renderedValues.join('')
+    }
+
+    return ''
+}
+
+function extractStructuredUiHtml(structuredPayload) {
+    if (!structuredPayload || typeof structuredPayload !== 'object') {
+        return ''
+    }
+
+    const renderedBlocks = []
+    for (const key of STRUCTURED_RESPONSE_UI_KEYS) {
+        if (!(key in structuredPayload)) {
+            continue
+        }
+
+        const renderedBlock = renderStructuredUiBlock(structuredPayload[key], key, 0)
+        if (renderedBlock !== '') {
+            renderedBlocks.push(renderedBlock)
+        }
+    }
+
+    return renderedBlocks.join('<br/>')
+}
+
+function normalizeJourneyBuilderAssistantResponse(responseData) {
+    const structuredPayload = findStructuredAssistantPayload(responseData)
+    if (structuredPayload !== null) {
+        const spokenText = extractStructuredResponseText(structuredPayload)
+        const renderedUiHtml = extractStructuredUiHtml(structuredPayload)
+        const renderedParts = []
+        if (spokenText !== '') {
+            renderedParts.push(htmlEncode(spokenText).replace(/\n/g, '<br/>'))
+        }
+        if (renderedUiHtml !== '') {
+            renderedParts.push(renderedUiHtml)
+        }
+
+        if (renderedParts.length > 0) {
+            return {
+                isStructured: true,
+                assistantReply: spokenText || stripHtmlTags(renderedUiHtml),
+                spokenText,
+                displayHtml: renderedParts.join('<br/>')
+            }
+        }
+    }
+
+    const assistantReply = extractTextFromJourneyBuilderResponse(responseData)
+    return {
+        isStructured: false,
+        assistantReply,
+        spokenText: assistantReply,
+        displayHtml: assistantReply.replace(/\n/g, '<br/>')
+    }
+}
+
 function extractTextFromJourneyBuilderResponse(responseData) {
     if (responseData === null || responseData === undefined) {
         return ''
@@ -1285,6 +1560,7 @@ async function readJourneyBuilderStreamResponse(response, chatHistoryTextArea) {
     if (!response.body || typeof response.body.getReader !== 'function') {
         return {
             assistantReply: '',
+            rawAssistantPayload: '',
             renderedIncrementally: false
         }
     }
@@ -1409,6 +1685,7 @@ async function readJourneyBuilderStreamResponse(response, chatHistoryTextArea) {
 
     return {
         assistantReply,
+        rawAssistantPayload: assistantReply || fallbackReply,
         renderedIncrementally
     }
 }
@@ -1573,6 +1850,7 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
     }
 
     chatHistoryTextArea.innerHTML += imgUrlPath.trim() ? 'Assistant: ' : '<br/>Assistant: '
+    const assistantMessageStartIndex = chatHistoryTextArea.innerHTML.length
 
     fetch(endpoint, {
         method: 'POST',
@@ -1591,17 +1869,34 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
 
             const data = await response.json()
             return {
-                assistantReply: extractTextFromJourneyBuilderResponse(data),
+                rawAssistantPayload: data,
                 renderedIncrementally: false
             }
         })
-        .then(({ assistantReply, renderedIncrementally }) => {
-            if (!assistantReply) {
-                assistantReply = 'No se pudo obtener una respuesta del flujo.'
+        .then(({ assistantReply, rawAssistantPayload, renderedIncrementally }) => {
+            const normalizedAssistant = normalizeJourneyBuilderAssistantResponse(
+                rawAssistantPayload !== undefined ? rawAssistantPayload : assistantReply
+            )
+
+            let assistantReplyText = normalizedAssistant.assistantReply
+            let assistantDisplayHtml = normalizedAssistant.displayHtml
+            let assistantSpeechText = normalizedAssistant.spokenText
+            const isStructuredAssistant = normalizedAssistant.isStructured
+
+            if (!assistantReplyText && !assistantDisplayHtml) {
+                assistantReplyText = 'No se pudo obtener una respuesta del flujo.'
+                assistantDisplayHtml = assistantReplyText.replace(/\n/g, '<br/>')
+                assistantSpeechText = assistantReplyText
             }
 
-            if (!renderedIncrementally) {
-                chatHistoryTextArea.innerHTML += assistantReply.replace(/\n/g, '<br/>')
+            if (!renderedIncrementally || isStructuredAssistant) {
+                if (renderedIncrementally && isStructuredAssistant) {
+                    chatHistoryTextArea.innerHTML = chatHistoryTextArea.innerHTML.slice(
+                        0,
+                        assistantMessageStartIndex
+                    )
+                }
+                chatHistoryTextArea.innerHTML += assistantDisplayHtml
                 chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
             }
 
@@ -1609,11 +1904,13 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
                 chatHistoryTextArea.innerHTML += '<br/>'
             }
 
-            speak(assistantReply)
+            if (assistantSpeechText) {
+                speak(assistantSpeechText)
+            }
 
             messages.push({
                 role: 'assistant',
-                content: assistantReply
+                content: assistantReplyText
             })
         })
         .catch(error => {
