@@ -204,6 +204,61 @@ function setConfigurationVisibility(visible) {
     configuration.hidden = !visible
 }
 
+function getAssistantStructuredUiContainer() {
+    return document.getElementById('assistantStructuredUi')
+}
+
+function clearAssistantStructuredUi() {
+    const container = getAssistantStructuredUiContainer()
+    if (container === null) {
+        return
+    }
+
+    container.innerHTML = ''
+    container.hidden = true
+}
+
+function renderAssistantStructuredUi(uiHtml) {
+    const container = getAssistantStructuredUiContainer()
+    if (container === null) {
+        return
+    }
+
+    const normalizedHtml = typeof uiHtml === 'string' ? uiHtml.trim() : ''
+    if (normalizedHtml === '') {
+        clearAssistantStructuredUi()
+        return
+    }
+
+    container.innerHTML = normalizedHtml
+    container.hidden = false
+}
+
+function ensureAssistantStructuredUiEvents() {
+    const container = getAssistantStructuredUiContainer()
+    if (container === null || container.dataset.boundEvents === '1') {
+        return
+    }
+
+    container.dataset.boundEvents = '1'
+    container.addEventListener('click', (event) => {
+        const clickedButton = event.target.closest('.assistant-response-button')
+        if (!clickedButton) {
+            return
+        }
+
+        event.preventDefault()
+        const buttonValue = String(clickedButton.dataset.assistantValue || '').trim()
+        const buttonLabel = String(clickedButton.textContent || '').trim()
+        const nextQuery = buttonValue !== '' ? buttonValue : buttonLabel
+        if (nextQuery === '') {
+            return
+        }
+
+        handleUserQuery(nextQuery, '', '')
+    })
+}
+
 function syncWidgetIframeFrame(open) {
     if (!isWidgetMode) {
         return
@@ -325,6 +380,7 @@ function resetSessionUi() {
     document.getElementById('stopSession').disabled = true
     setConfigurationVisibility(true)
     document.getElementById('chatHistory').hidden = true
+    clearAssistantStructuredUi()
     document.getElementById('showTypeMessage').checked = false
     document.getElementById('showTypeMessage').disabled = true
     document.getElementById('showTypeMessageCheckbox').hidden = isWidgetMode
@@ -1341,6 +1397,10 @@ function renderStructuredUiBlock(blockValue, blockKey, depth = 0) {
             return renderStructuredUiBlock(parsedValue, blockKey, depth + 1)
         }
 
+        if (isStructuredButtonKey(blockKey)) {
+            return `<button type="button" class="assistant-response-button" data-assistant-value="${htmlEncode(trimmed)}">${htmlEncode(trimmed)}</button>`
+        }
+
         return sanitizeAssistantHtml(trimmed)
     }
 
@@ -1364,8 +1424,9 @@ function renderStructuredUiBlock(blockValue, blockKey, depth = 0) {
             const buttonLabel = String(
                 blockValue.label || blockValue.text || blockValue.title || blockValue.value || ''
             ).trim()
+            const buttonValue = String(blockValue.value || buttonLabel).trim()
             if (buttonLabel !== '') {
-                return `<button type="button" class="assistant-response-button" disabled>${htmlEncode(buttonLabel)}</button>`
+                return `<button type="button" class="assistant-response-button" data-assistant-value="${htmlEncode(buttonValue)}">${htmlEncode(buttonLabel)}</button>`
             }
         }
 
@@ -1422,7 +1483,8 @@ function normalizeJourneyBuilderAssistantResponse(responseData) {
                 isStructured: true,
                 assistantReply: spokenText || stripHtmlTags(renderedUiHtml),
                 spokenText,
-                displayHtml: renderedParts.join('<br/>')
+                displayHtml: renderedParts.join('<br/>'),
+                uiHtml: renderedUiHtml
             }
         }
     }
@@ -1432,7 +1494,8 @@ function normalizeJourneyBuilderAssistantResponse(responseData) {
         isStructured: false,
         assistantReply,
         spokenText: assistantReply,
-        displayHtml: assistantReply.replace(/\n/g, '<br/>')
+        displayHtml: assistantReply.replace(/\n/g, '<br/>'),
+        uiHtml: ''
     }
 }
 
@@ -1782,6 +1845,7 @@ function stopSpeaking() {
 
 function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
     lastInteractionTime = new Date()
+    clearAssistantStructuredUi()
     let contentMessage = userQuery
     if (imgUrlPath.trim()) {
         contentMessage = [  
@@ -1881,6 +1945,7 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
             let assistantReplyText = normalizedAssistant.assistantReply
             let assistantDisplayHtml = normalizedAssistant.displayHtml
             let assistantSpeechText = normalizedAssistant.spokenText
+            const assistantUiHtml = normalizedAssistant.uiHtml
             const isStructuredAssistant = normalizedAssistant.isStructured
 
             if (!assistantReplyText && !assistantDisplayHtml) {
@@ -1904,6 +1969,12 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
                 chatHistoryTextArea.innerHTML += '<br/>'
             }
 
+            if (isWidgetMode) {
+                renderAssistantStructuredUi(assistantUiHtml)
+            } else {
+                clearAssistantStructuredUi()
+            }
+
             if (assistantSpeechText) {
                 speak(assistantSpeechText)
             }
@@ -1915,6 +1986,7 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
         })
         .catch(error => {
             const errorMessage = `Error: ${error.message}`
+            clearAssistantStructuredUi()
             chatHistoryTextArea.innerHTML += errorMessage
             chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
             speak("Lo siento, ocurrió un error al consultar el flujo.")
@@ -2081,6 +2153,8 @@ function loadJourneyBuilderParamsFromUrl() {
 
 window.onload = () => {
     const shouldAutoStart = loadJourneyBuilderParamsFromUrl()
+    ensureAssistantStructuredUiEvents()
+    clearAssistantStructuredUi()
     setRemoteVideoExpanded()
     setConfigurationVisibility(!isWidgetMode)
     setMicrophoneUiState(false, true)
@@ -2255,6 +2329,7 @@ window.stopSession = () => {
 window.clearChatHistory = () => {
     lastInteractionTime = new Date()
     document.getElementById('chatHistory').innerHTML = ''
+    clearAssistantStructuredUi()
     const flowId = document.getElementById('jbFlowId').value.trim() || 'flow'
     journeyBuilderSessionId = `avatar-${flowId}-${Date.now()}`
     hasSentAutoHelloForSession = false
