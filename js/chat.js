@@ -255,8 +255,164 @@ function ensureAssistantStructuredUiEvents() {
             return
         }
 
+        const functionAction = tryRunStructuredButtonFunction(nextQuery)
+        if (functionAction.handled) {
+            return
+        }
+
         handleUserQuery(nextQuery, '', '')
     })
+}
+
+function parseNoArgsFunctionExpression(rawValue) {
+    if (typeof rawValue !== 'string') {
+        return null
+    }
+
+    const trimmed = rawValue.trim()
+    if (trimmed === '') {
+        return null
+    }
+
+    const match = trimmed.match(
+        /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(\s*\)$/
+    )
+    if (!match) {
+        return null
+    }
+
+    return {
+        expression: trimmed,
+        path: match[1].split('.')
+    }
+}
+
+function getFunctionExecutionTargets(functionPath) {
+    const pushUniqueTarget = (targets, candidate) => {
+        if (!candidate) {
+            return
+        }
+
+        if (!targets.includes(candidate)) {
+            targets.push(candidate)
+        }
+    }
+
+    const targets = []
+    const firstSegment = functionPath[0]
+    const remainingPath =
+        firstSegment === 'window' || firstSegment === 'parent' || firstSegment === 'top'
+            ? functionPath.slice(1)
+            : functionPath
+
+    if (remainingPath.length === 0) {
+        return []
+    }
+
+    if (firstSegment === 'window') {
+        return [{ root: window, path: remainingPath }]
+    }
+
+    if (firstSegment === 'parent') {
+        try {
+            if (window.parent && window.parent !== window) {
+                return [{ root: window.parent, path: remainingPath }]
+            }
+        } catch (error) {
+            console.debug('Unable to access parent window for button function execution.', error)
+        }
+        return []
+    }
+
+    if (firstSegment === 'top') {
+        try {
+            if (window.top) {
+                return [{ root: window.top, path: remainingPath }]
+            }
+        } catch (error) {
+            console.debug('Unable to access top window for button function execution.', error)
+        }
+        return []
+    }
+
+    pushUniqueTarget(targets, window)
+    try {
+        if (window.parent && window.parent !== window) {
+            pushUniqueTarget(targets, window.parent)
+        }
+    } catch (error) {
+        console.debug('Unable to access parent window for button function execution.', error)
+    }
+
+    try {
+        if (window.top) {
+            pushUniqueTarget(targets, window.top)
+        }
+    } catch (error) {
+        console.debug('Unable to access top window for button function execution.', error)
+    }
+
+    return targets.map((root) => ({ root, path: remainingPath }))
+}
+
+function resolveFunctionFromRoot(rootObject, functionPath) {
+    if (!rootObject || !Array.isArray(functionPath) || functionPath.length === 0) {
+        return null
+    }
+
+    let owner = rootObject
+    for (let index = 0; index < functionPath.length - 1; index += 1) {
+        if (owner === null || owner === undefined) {
+            return null
+        }
+        owner = owner[functionPath[index]]
+    }
+
+    if (owner === null || owner === undefined) {
+        return null
+    }
+
+    const functionName = functionPath[functionPath.length - 1]
+    const targetFunction = owner[functionName]
+    if (typeof targetFunction !== 'function') {
+        return null
+    }
+
+    return {
+        owner,
+        targetFunction
+    }
+}
+
+function tryRunStructuredButtonFunction(buttonActionValue) {
+    const parsedExpression = parseNoArgsFunctionExpression(buttonActionValue)
+    if (parsedExpression === null) {
+        return { handled: false }
+    }
+
+    const executionTargets = getFunctionExecutionTargets(parsedExpression.path)
+    for (const executionTarget of executionTargets) {
+        const resolvedFunction = resolveFunctionFromRoot(executionTarget.root, executionTarget.path)
+        if (resolvedFunction === null) {
+            continue
+        }
+
+        try {
+            resolvedFunction.targetFunction.call(resolvedFunction.owner)
+            return { handled: true }
+        } catch (error) {
+            console.error(
+                `Structured button function "${parsedExpression.expression}" threw an error.`,
+                error
+            )
+            return { handled: true }
+        }
+    }
+
+    console.warn(
+        `Structured button requested function "${parsedExpression.expression}" but it was not found in window context.`
+    )
+    return { handled: true }
 }
 
 function syncWidgetIframeFrame(open) {
