@@ -39,6 +39,9 @@ var autoMicLastTriggerAt = 0
 var autoMicStartCooldownMs = 600
 var autoMicMinActiveMs = 80
 var autoMicThresholdRms = 0.018
+var pendingCallboxMicAfterGreeting = false
+var waitingForCallboxGreetingResponse = false
+var callboxMicResumeTimeoutId = null
 
 function getMainVideoWidth() {
     return isWidgetMode ? '100%' : '960px'
@@ -174,6 +177,60 @@ function setCallboxWindowControlsState() {
     }
     if (endButton !== null) {
         endButton.disabled = isConnecting
+    }
+}
+
+function clearCallboxMicResumeTimeout() {
+    if (callboxMicResumeTimeoutId !== null) {
+        clearTimeout(callboxMicResumeTimeoutId)
+        callboxMicResumeTimeoutId = null
+    }
+}
+
+function startCallboxMicWhenAvatarIsIdle() {
+    clearCallboxMicResumeTimeout()
+    if (!pendingCallboxMicAfterGreeting) {
+        return
+    }
+
+    if (
+        !isWidgetMode ||
+        !isMinimalWidgetCallbox ||
+        !widgetOpen ||
+        !sessionActive ||
+        waitingForCallboxGreetingResponse ||
+        isAvatarMuted ||
+        speechRecognizer === undefined
+    ) {
+        return
+    }
+
+    if (isSpeaking || spokenTextQueue.length > 0) {
+        callboxMicResumeTimeoutId = setTimeout(startCallboxMicWhenAvatarIsIdle, 250)
+        return
+    }
+
+    pendingCallboxMicAfterGreeting = false
+    setAutoMicStatus('Micrófono automático en espera de voz.')
+    window.microphone(true)
+}
+
+function waitForGreetingBeforeStartingCallboxMic() {
+    if (!isWidgetMode || !isMinimalWidgetCallbox) {
+        return
+    }
+
+    pendingCallboxMicAfterGreeting = true
+    waitingForCallboxGreetingResponse = true
+    stopMicrophoneListeningIfNeeded()
+    stopAutoMicrophoneDetection()
+    setAutoMicStatus('Esperando el saludo del agente...')
+    startCallboxMicWhenAvatarIsIdle()
+}
+
+function handleAvatarSpeechFinished() {
+    if (pendingCallboxMicAfterGreeting) {
+        startCallboxMicWhenAvatarIsIdle()
     }
 }
 
@@ -567,6 +624,9 @@ function startConnectionEstablishTimeout() {
 function resetSessionUi() {
     clearConnectionEstablishTimeout()
     clearSessionActivationTimeout()
+    clearCallboxMicResumeTimeout()
+    pendingCallboxMicAfterGreeting = false
+    waitingForCallboxGreetingResponse = false
     isConnecting = false
     isMicrophoneListening = false
     document.getElementById('startSession').disabled = false
@@ -595,6 +655,9 @@ function resetSessionUi() {
 function releaseAvatarClients() {
     clearConnectionEstablishTimeout()
     clearSessionActivationTimeout()
+    clearCallboxMicResumeTimeout()
+    pendingCallboxMicAfterGreeting = false
+    waitingForCallboxGreetingResponse = false
     isConnecting = false
     isMicrophoneListening = false
     stopAutoMicrophoneDetection()
@@ -1206,7 +1269,13 @@ function setupWebRTC(iceServerUrl, iceServerUsername, iceServerCredential) {
                     sessionActive = true
                     if (isWidgetMode && isMinimalWidgetCallbox) {
                         document.getElementById('continuousConversation').checked = true
-                        window.microphone(true)
+                        if (!hasSentAutoHelloForSession) {
+                            hasSentAutoHelloForSession = true
+                            waitForGreetingBeforeStartingCallboxMic()
+                            handleUserQuery('hola', '', '')
+                        } else {
+                            startCallboxMicWhenAvatarIsIdle()
+                        }
                     } else {
                         startAutoMicrophoneDetection()
                     }
@@ -2010,6 +2079,7 @@ function speakNext(text, endingSilenceMs = 0, skipUpdatingChatHistory = false) {
             } else {
                 isSpeaking = false
                 document.getElementById('stopSpeaking').disabled = true
+                handleAvatarSpeechFinished()
             }
         }).catch(
             (error) => {
@@ -2022,6 +2092,7 @@ function speakNext(text, endingSilenceMs = 0, skipUpdatingChatHistory = false) {
                 } else {
                     isSpeaking = false
                     document.getElementById('stopSpeaking').disabled = true
+                    handleAvatarSpeechFinished()
                 }
             }
         )
@@ -2034,6 +2105,7 @@ function stopSpeaking() {
         () => {
             isSpeaking = false
             document.getElementById('stopSpeaking').disabled = true
+            handleAvatarSpeechFinished()
             console.log("[" + (new Date()).toISOString() + "] Stop speaking request sent.")
         }
     ).catch(
@@ -2176,7 +2248,13 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
             }
 
             if (assistantSpeechText) {
+                if (pendingCallboxMicAfterGreeting) {
+                    waitingForCallboxGreetingResponse = false
+                }
                 speak(assistantSpeechText)
+            } else if (pendingCallboxMicAfterGreeting) {
+                waitingForCallboxGreetingResponse = false
+                startCallboxMicWhenAvatarIsIdle()
             }
 
             messages.push({
@@ -2189,6 +2267,9 @@ function handleUserQuery(userQuery, userQueryHTML, imgUrlPath) {
             clearAssistantStructuredUi()
             chatHistoryTextArea.innerHTML += errorMessage
             chatHistoryTextArea.scrollTop = chatHistoryTextArea.scrollHeight
+            if (pendingCallboxMicAfterGreeting) {
+                waitingForCallboxGreetingResponse = false
+            }
             speak("Lo siento, ocurrió un error al consultar el flujo.")
         })
 }
@@ -2424,6 +2505,9 @@ window.minimizeAvatarWidget = () => {
         return
     }
 
+    pendingCallboxMicAfterGreeting = false
+    waitingForCallboxGreetingResponse = false
+    clearCallboxMicResumeTimeout()
     stopMicrophoneListeningIfNeeded()
     stopAutoMicrophoneDetection()
     setAutoMicStatus('Avatar minimizado. Abrí el widget para continuar.')
@@ -2458,6 +2542,7 @@ window.toggleAvatarWidget = () => {
         }
 
         window.clearChatHistory()
+        waitForGreetingBeforeStartingCallboxMic()
         handleUserQuery('hola', '', '')
         return
     }
@@ -2653,10 +2738,6 @@ window.microphone = (autoTriggered = false) => {
             isMicrophoneListening = true
             setMicrophoneUiState(true, false)
             setAutoMicStatus('Micrófono automático escuchando.')
-            if (!hasSentAutoHelloForSession) {
-                hasSentAutoHelloForSession = true
-                handleUserQuery('hola', '', '')
-            }
         }, (err) => {
             console.log("Failed to start continuous recognition:", err)
             isMicrophoneListening = false
