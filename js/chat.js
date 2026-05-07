@@ -434,18 +434,18 @@ function syncWidgetIframeFrame(open) {
 
         if (isMinimalWidgetCallbox) {
             frame.style.position = 'fixed'
-            frame.style.left = '0'
-            frame.style.top = '0'
-            frame.style.right = '0'
-            frame.style.bottom = '0'
-            frame.width = '100%'
-            frame.height = '100%'
-            frame.style.width = '100vw'
-            frame.style.height = '100vh'
-            frame.style.maxWidth = '100vw'
-            frame.style.maxHeight = '100vh'
-            frame.style.borderRadius = '0'
-            frame.style.boxShadow = 'none'
+            frame.style.left = ''
+            frame.style.top = ''
+            frame.style.right = 'max(12px, 2vw)'
+            frame.style.bottom = 'max(12px, 2vw)'
+            frame.width = '380'
+            frame.height = '560'
+            frame.style.width = 'min(380px, calc(100vw - 24px))'
+            frame.style.height = 'min(560px, calc(100vh - 24px))'
+            frame.style.maxWidth = '380px'
+            frame.style.maxHeight = '560px'
+            frame.style.borderRadius = '18px'
+            frame.style.boxShadow = '0 22px 48px rgba(15, 23, 42, 0.28)'
             return
         }
 
