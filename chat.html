@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Journey Builder Avatar</title>
-    <link href="./css/styles.css?v=20260303f" rel="stylesheet">
+    <link href="./css/styles.css?v=20260507a" rel="stylesheet">
     <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-    <script src="./js/chat.js?v=20260303f"></script>
+    <script src="./js/chat.js?v=20260507a"></script>
 </head>
 <body class="avatar-page">
   <button
@@ -24,6 +24,22 @@
     aria-label="Mutear micrófono"
     title="Mutear micrófono">
     Mutear
+  </button>
+  <button
+    id="avatarMinimize"
+    class="avatar-window-btn avatar-minimize-btn"
+    onclick="window.minimizeAvatarWidget()"
+    aria-label="Minimizar avatar"
+    title="Minimizar avatar">
+    &minus;
+  </button>
+  <button
+    id="avatarEndCall"
+    class="avatar-window-btn avatar-end-btn"
+    onclick="window.endAvatarWidgetSession()"
+    aria-label="Cerrar sesión de avatar"
+    title="Cerrar sesión de avatar">
+    &times;
   </button>
 
   <div id="avatarWidgetShell" class="avatar-widget-shell" aria-hidden="true">

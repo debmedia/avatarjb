@@ -36,9 +36,9 @@ var autoMicDataArray = null
 var autoMicIntervalId = null
 var autoMicSoundDetectedAt = 0
 var autoMicLastTriggerAt = 0
-var autoMicStartCooldownMs = 2000
-var autoMicMinActiveMs = 180
-var autoMicThresholdRms = 0.024
+var autoMicStartCooldownMs = 600
+var autoMicMinActiveMs = 80
+var autoMicThresholdRms = 0.018
 
 function getMainVideoWidth() {
     return isWidgetMode ? '100%' : '960px'
@@ -75,11 +75,21 @@ function setCallToggleState() {
     if (isMinimalWidgetCallbox) {
         const shell = document.getElementById('avatarWidgetShell')
         if (shell !== null) {
-            shell.setAttribute('aria-hidden', 'false')
+            shell.setAttribute('aria-hidden', widgetOpen ? 'false' : 'true')
         }
-        syncWidgetIframeFrame(true)
         fab.classList.remove('call-active', 'call-connecting')
-        fab.setAttribute('aria-expanded', 'true')
+        fab.setAttribute('aria-expanded', widgetOpen ? 'true' : 'false')
+        if (!widgetOpen) {
+            syncWidgetIframeFrame(false)
+            fab.disabled = false
+            fab.textContent = 'JB'
+            fab.setAttribute('aria-label', 'Abrir avatar')
+            fab.title = 'Abrir avatar'
+            setMuteToggleState()
+            return
+        }
+
+        syncWidgetIframeFrame(true)
         if (isConnecting) {
             fab.disabled = true
             fab.textContent = 'Conectando...'
@@ -150,6 +160,21 @@ function setMuteToggleState() {
     muteButton.textContent = 'Mutear'
     muteButton.setAttribute('aria-label', 'Mutear micrófono')
     muteButton.title = 'Mutear micrófono'
+}
+
+function setCallboxWindowControlsState() {
+    if (!isWidgetMode || !isMinimalWidgetCallbox) {
+        return
+    }
+
+    const minimizeButton = document.getElementById('avatarMinimize')
+    const endButton = document.getElementById('avatarEndCall')
+    if (minimizeButton !== null) {
+        minimizeButton.disabled = isConnecting
+    }
+    if (endButton !== null) {
+        endButton.disabled = isConnecting
+    }
 }
 
 function stopMicrophoneListeningIfNeeded() {
@@ -438,6 +463,18 @@ function syncWidgetIframeFrame(open) {
             frame.style.top = ''
             frame.style.right = 'max(12px, 2vw)'
             frame.style.bottom = 'max(12px, 2vw)'
+            if (!open) {
+                frame.width = '84'
+                frame.height = '84'
+                frame.style.width = '84px'
+                frame.style.height = '84px'
+                frame.style.maxWidth = '84px'
+                frame.style.maxHeight = '84px'
+                frame.style.borderRadius = '0'
+                frame.style.boxShadow = 'none'
+                return
+            }
+
             frame.width = '380'
             frame.height = '560'
             frame.style.width = 'min(380px, calc(100vw - 24px))'
@@ -482,7 +519,7 @@ function setWidgetOpenState(open) {
     const shell = document.getElementById('avatarWidgetShell')
     if (shell !== null) {
         if (isWidgetMode && isMinimalWidgetCallbox) {
-            shell.setAttribute('aria-hidden', 'false')
+            shell.setAttribute('aria-hidden', open ? 'false' : 'true')
         } else {
             shell.setAttribute('aria-hidden', open ? 'false' : 'true')
         }
@@ -494,6 +531,7 @@ function setWidgetOpenState(open) {
     }
 
     setCallToggleState()
+    setCallboxWindowControlsState()
 }
 
 function clearConnectionEstablishTimeout() {
@@ -1159,14 +1197,20 @@ function setupWebRTC(iceServerUrl, iceServerUsername, iceServerCredential) {
                 setWidgetStatus('Avatar conectado')
                 setSessionHint('Avatar abierto. Cerrar avatar finaliza la sesión actual.')
                 setAutoMicStatus('Micrófono automático en espera de voz.')
+                setCallboxWindowControlsState()
                 clearSessionActivationTimeout()
                 sessionActivationTimeoutId = setTimeout(() => {
                     if (userClosedSession || avatarSynthesizer === undefined) {
                         return
                     }
                     sessionActive = true
-                    startAutoMicrophoneDetection()
-                }, 5000) // Set session active after 5 seconds
+                    if (isWidgetMode && isMinimalWidgetCallbox) {
+                        document.getElementById('continuousConversation').checked = true
+                        window.microphone(true)
+                    } else {
+                        startAutoMicrophoneDetection()
+                    }
+                }, isWidgetMode && isMinimalWidgetCallbox ? 600 : 5000)
             }
 
             videoElement.onplaying = () => {
@@ -2312,6 +2356,9 @@ window.onload = () => {
     ensureAssistantStructuredUiEvents()
     clearAssistantStructuredUi()
     setRemoteVideoExpanded()
+    if (isWidgetMode && isMinimalWidgetCallbox) {
+        document.getElementById('continuousConversation').checked = true
+    }
     setConfigurationVisibility(!isWidgetMode)
     setMicrophoneUiState(false, true)
     setSessionHint('Abrir avatar crea una sesión nueva. Cerrar avatar finaliza la sesión actual.')
@@ -2341,11 +2388,18 @@ window.onload = () => {
 }
 
 window.openAvatarWidget = () => {
+    if (isWidgetMode && isMinimalWidgetCallbox && !widgetOpen) {
+        setWidgetOpenState(true)
+    }
+
     if (isWidgetMode && !isMinimalWidgetCallbox && !widgetOpen) {
         setWidgetOpenState(true)
     }
 
     if (sessionActive || isConnecting || avatarSynthesizer !== undefined) {
+        if (sessionActive && isWidgetMode && isMinimalWidgetCallbox && !isMicrophoneListening) {
+            window.microphone(true)
+        }
         return
     }
 
@@ -2364,8 +2418,36 @@ window.closeAvatarWidget = () => {
     }
 }
 
+window.minimizeAvatarWidget = () => {
+    if (!isWidgetMode || !isMinimalWidgetCallbox) {
+        window.closeAvatarWidget()
+        return
+    }
+
+    stopMicrophoneListeningIfNeeded()
+    stopAutoMicrophoneDetection()
+    setAutoMicStatus('Avatar minimizado. Abrí el widget para continuar.')
+    setWidgetOpenState(false)
+}
+
+window.endAvatarWidgetSession = () => {
+    if (isWidgetMode && isMinimalWidgetCallbox && isConnecting) {
+        return
+    }
+
+    window.stopSession()
+    if (isWidgetMode && isMinimalWidgetCallbox) {
+        setWidgetOpenState(false)
+    }
+}
+
 window.toggleAvatarWidget = () => {
     if (isWidgetMode && isMinimalWidgetCallbox) {
+        if (!widgetOpen) {
+            window.openAvatarWidget()
+            return
+        }
+
         if (isConnecting) {
             return
         }
@@ -2408,6 +2490,9 @@ window.startSession = () => {
     if (isWidgetMode && !isMinimalWidgetCallbox && !widgetOpen) {
         setWidgetOpenState(true)
     }
+    if (isWidgetMode && isMinimalWidgetCallbox && !widgetOpen) {
+        setWidgetOpenState(true)
+    }
 
     if (isConnecting || sessionActive || avatarSynthesizer !== undefined) {
         return
@@ -2446,6 +2531,7 @@ window.startSession = () => {
     setSessionHint('Abriendo avatar. Esta acción crea una sesión nueva.')
     setAutoMicStatus('Inicializando micrófono automático...')
     setCallToggleState()
+    setCallboxWindowControlsState()
     connectAvatar()
 }
 
@@ -2478,6 +2564,9 @@ window.stopSession = () => {
     setAutoMicStatus('Micrófono automático detenido. Abrí avatar para reactivarlo.')
     setWidgetStatus('Sesión cerrada')
     if (isWidgetMode && !isMinimalWidgetCallbox) {
+        setWidgetOpenState(false)
+    }
+    if (isWidgetMode && isMinimalWidgetCallbox) {
         setWidgetOpenState(false)
     }
 }

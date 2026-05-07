@@ -108,6 +108,10 @@ body.avatar-page {
   display: none;
 }
 
+.avatar-window-btn {
+  display: none;
+}
+
 .avatar-configuration {
   background: #ffffff;
   border-bottom: 1px solid var(--panel-border);
@@ -537,6 +541,12 @@ body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-widget-shell {
   box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
 }
 
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode:not(.avatar-widget-open) .avatar-widget-shell,
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode:not(.avatar-widget-open) .avatar-mute-btn,
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode:not(.avatar-widget-open) .avatar-window-btn {
+  display: none !important;
+}
+
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-widget-header,
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-configuration,
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-controls,
@@ -616,6 +626,38 @@ body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-mute-btn {
   z-index: 1002;
 }
 
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-window-btn {
+  display: inline-flex;
+  position: absolute;
+  top: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2937;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.15);
+  z-index: 1003;
+}
+
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-minimize-btn {
+  right: 50px;
+}
+
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-end-btn {
+  right: 10px;
+}
+
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-window-btn:hover {
+  background: #f8fafc;
+}
+
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-mute-btn:hover {
   background: #f8fafc;
 }
@@ -636,11 +678,28 @@ body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-fab:hover {
 
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-fab.call-connecting,
 body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-fab[disabled],
-body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-mute-btn[disabled] {
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-mute-btn[disabled],
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode .avatar-window-btn[disabled] {
   background: rgba(241, 245, 249, 0.92);
   color: #64748b;
   box-shadow: none;
   cursor: wait;
+}
+
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode:not(.avatar-widget-open) .avatar-fab {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8b4dff 0%, #6d37f6 100%);
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+body.avatar-page.avatar-widget-mode.avatar-callbox-mode:not(.avatar-widget-open) .avatar-fab:hover {
+  background: linear-gradient(135deg, #7a3af4 0%, #5d27e8 100%);
 }
 
 @media (max-width: 900px) {
