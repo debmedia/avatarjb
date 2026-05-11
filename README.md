@@ -56,6 +56,7 @@ Extra params:
 - `chat_url=.../gemini-live.html`
 - `gemini_api_key` for local demos, or `gemini_token_url` for a backend credentials endpoint
 - `gemini_model` defaults to `gemini-3.1-flash-live-preview`
+- `gemini_voice` defaults to `Charon`
 - `anam_session_token` short-lived Anam session token for local testing
 - `anam_token_url` backend endpoint that returns `{ "sessionToken": "..." }`
 - `anam_audio_sample_rate` defaults to `16000`

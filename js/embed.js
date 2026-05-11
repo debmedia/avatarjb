@@ -78,6 +78,8 @@
       },
       { keys: ["gemini_api_key", "gemini-api-key", "geminiApiKey"], param: "geminiApiKey" },
       { keys: ["gemini_model", "gemini-model", "geminiModel"], param: "geminiModel" },
+      { keys: ["gemini_voice", "gemini-voice", "geminiVoice"], param: "geminiVoice" },
+      { keys: ["gemini_voice_name", "gemini-voice-name", "geminiVoiceName"], param: "geminiVoiceName" },
       { keys: ["gemini_token_url", "gemini-token-url", "geminiTokenUrl"], param: "geminiTokenUrl" },
       { keys: ["gemini_token_method", "gemini-token-method", "geminiTokenMethod"], param: "geminiTokenMethod" },
       { keys: ["anam_session_token", "anam-session-token", "anamSessionToken"], param: "anamSessionToken" },

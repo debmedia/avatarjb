@@ -2,6 +2,7 @@
   "use strict";
 
   var DEFAULT_MODEL = "gemini-3.1-flash-live-preview";
+  var DEFAULT_GEMINI_VOICE_NAME = "Charon";
   var DEFAULT_ANAM_SDK_URL = "https://esm.sh/@anam-ai/js-sdk@latest";
   var DEFAULT_TALKING_HEAD_MODULE = "talkinghead";
   var DEFAULT_TALKING_HEAD_AVATAR_URL = "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/avatars/brunette.glb";
@@ -105,6 +106,7 @@
     talkingHeadView: firstParam(["talkingHeadView", "talking_head_view"], "head"),
     talkingHeadLipsyncLang: firstParam(["talkingHeadLipsyncLang", "talking_head_lipsync_lang"], "en"),
     model: firstParam(["geminiModel", "gemini_model"], DEFAULT_MODEL),
+    geminiVoiceName: firstParam(["geminiVoiceName", "gemini_voice_name", "geminiVoice", "gemini_voice"], DEFAULT_GEMINI_VOICE_NAME),
     view: firstParam(["view"], ""),
     autoStart: parseBoolean(firstParam(["autoStart", "auto_start"], ""), false),
     greetOnStart: parseBoolean(firstParam(["greetOnStart", "greet_on_start"], ""), false),
@@ -439,6 +441,17 @@
     return new Promise(function (resolve) {
       window.setTimeout(resolve, ms);
     });
+  }
+
+  function cancelBrowserSpeech() {
+    if (!window.speechSynthesis || typeof window.speechSynthesis.cancel !== "function") {
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+    } catch (error) {
+      console.debug("Unable to cancel browser speech synthesis:", error);
+    }
   }
 
   function normalizeTextForMatch(text) {
@@ -1051,6 +1064,13 @@
         model: "models/" + config.model,
         generationConfig: {
           responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: config.geminiVoiceName.trim() || DEFAULT_GEMINI_VOICE_NAME,
+              },
+            },
+          },
         },
         systemInstruction: {
           parts: [{ text: buildSystemPrompt() }],
@@ -1150,6 +1170,7 @@
     state.micRemainder = new Float32Array(0);
     state.sessionId = "gemini-avatar-" + (config.flowId || "flow") + "-" + Date.now();
     resetTranscripts();
+    cancelBrowserSpeech();
     setOpen(true);
     setStatus("Conectando", false);
     updateButtons();
@@ -1250,6 +1271,7 @@
     stopMicCapture();
     stopScreenShare();
     stopQueuedPlayback();
+    cancelBrowserSpeech();
     stopAnamAvatar();
     stopTalkingHeadAvatar();
     stopDeerAvatar();
@@ -1587,19 +1609,6 @@
     return recent.indexOf("esperame un momento") >= 0 || recent.indexOf("un momento por favor") >= 0;
   }
 
-  function chooseSpanishSpeechVoice() {
-    if (!window.speechSynthesis || typeof window.speechSynthesis.getVoices !== "function") {
-      return null;
-    }
-    var voices = window.speechSynthesis.getVoices() || [];
-    return (
-      voices.find(function (voice) { return String(voice.lang || "").toLowerCase() === "es-cl"; }) ||
-      voices.find(function (voice) { return String(voice.lang || "").toLowerCase().indexOf("es-") === 0; }) ||
-      voices.find(function (voice) { return String(voice.lang || "").toLowerCase().indexOf("es") === 0; }) ||
-      null
-    );
-  }
-
   async function announceToolWaitBeforeToolCall() {
     if (recentlyAnnouncedToolWait()) {
       return;
@@ -1613,47 +1622,9 @@
 
     updateTranscript("model", TOOL_WAIT_PHRASE);
     setStatus("Consultando", false);
-    startLocalMouthPulse(1400);
-
-    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
-      await delay(650);
-      stopLocalMouthPulse();
-      return;
-    }
-
-    await new Promise(function (resolve) {
-      var resolved = false;
-      var utterance = new SpeechSynthesisUtterance(TOOL_WAIT_PHRASE);
-      var voice = chooseSpanishSpeechVoice();
-
-      utterance.lang = "es-CL";
-      utterance.rate = 1.04;
-      utterance.pitch = 1;
-      if (voice) {
-        utterance.voice = voice;
-      }
-
-      function finish() {
-        if (resolved) {
-          return;
-        }
-        resolved = true;
-        window.setTimeout(function () {
-          stopLocalMouthPulse();
-          resolve();
-        }, 120);
-      }
-
-      utterance.onend = finish;
-      utterance.onerror = finish;
-
-      try {
-        window.speechSynthesis.speak(utterance);
-        window.setTimeout(finish, 1900);
-      } catch (error) {
-        finish();
-      }
-    });
+    startLocalMouthPulse(450);
+    await delay(280);
+    stopLocalMouthPulse();
   }
 
   function argsFromFunctionCall(functionCall) {
