@@ -602,9 +602,17 @@ body.gemini-transcripts-hidden .gemini-avatar-stage {
   min-height: 282px;
 }
 
+body.gemini-transcripts-hidden.gemini-has-actions .gemini-avatar-stage {
+  flex: 1 1 176px;
+  min-height: 176px;
+}
+
 .gemini-action-panel {
   border-top: 1px solid var(--jb-border);
   background: #fff;
+  flex: 0 1 auto;
+  max-height: 184px;
+  overflow-y: auto;
   padding: 10px 12px;
 }
 
@@ -653,6 +661,7 @@ body.gemini-transcripts-hidden .gemini-avatar-stage {
 .gemini-controls {
   border-top: 1px solid var(--jb-border);
   background: #f7faff;
+  flex: 0 0 auto;
   padding: 10px;
   display: grid;
   grid-template-columns: 1fr 1fr;

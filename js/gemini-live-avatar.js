@@ -339,6 +339,7 @@
 
   function clearActionPanel() {
     state.actionPayload = null;
+    document.body.classList.remove("gemini-has-actions");
     if (elements.actionPanel) {
       elements.actionPanel.hidden = true;
       elements.actionPanel.innerHTML = "";
@@ -419,6 +420,7 @@
     }
 
     elements.actionPanel.hidden = false;
+    document.body.classList.add("gemini-has-actions");
   }
 
   function resetTranscripts() {
