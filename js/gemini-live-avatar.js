@@ -52,6 +52,7 @@
     greetingMicFallbackTimer: null,
     inputTranscript: "",
     outputTranscript: "",
+    actionPayload: null,
     sessionId: "",
   };
 
@@ -108,6 +109,9 @@
     autoStart: parseBoolean(firstParam(["autoStart", "auto_start"], ""), false),
     greetOnStart: parseBoolean(firstParam(["greetOnStart", "greet_on_start"], ""), false),
     shareScreenOnStart: parseBoolean(firstParam(["shareScreen", "share_screen"], ""), false),
+    hideTranscripts: parseBoolean(firstParam(["hideTranscripts", "hide_transcripts"], ""), false) ||
+      !parseBoolean(firstParam(["showTranscripts", "show_transcripts"], ""), true),
+    showButtons: parseBoolean(firstParam(["showButtons", "show_buttons"], ""), true),
     systemPrompt: firstParam(["systemPrompt", "system_prompt", "prompt"], ""),
   };
 
@@ -333,6 +337,90 @@
     }
   }
 
+  function clearActionPanel() {
+    state.actionPayload = null;
+    if (elements.actionPanel) {
+      elements.actionPanel.hidden = true;
+      elements.actionPanel.innerHTML = "";
+    }
+  }
+
+  function normalizeActionButtons(buttons) {
+    if (!Array.isArray(buttons)) {
+      return [];
+    }
+
+    return buttons
+      .map(function (button) {
+        if (typeof button === "string") {
+          return { label: button, value: button };
+        }
+        if (!button || typeof button !== "object") {
+          return null;
+        }
+        var label = String(button.label || button.text || button.title || button.value || "").trim();
+        var value = String(button.value || button.label || button.text || button.title || "").trim();
+        if (!label || !value) {
+          return null;
+        }
+        return { label: label, value: value };
+      })
+      .filter(Boolean);
+  }
+
+  function handleActionButtonClick(button) {
+    if (!button || !button.value || !state.ready) {
+      return;
+    }
+    clearActionPanel();
+    updateTranscript("user", button.label);
+    setStatus("Consultando", false);
+    sendClientText(button.value);
+  }
+
+  function renderActionPanel(payload) {
+    if (!elements.actionPanel || !config.showButtons) {
+      return;
+    }
+
+    clearActionPanel();
+    var buttons = normalizeActionButtons(payload && payload.buttons);
+    var form = String((payload && payload.form) || "").trim();
+    if (!buttons.length && !form) {
+      return;
+    }
+
+    state.actionPayload = {
+      form: form,
+      buttons: buttons,
+    };
+
+    if (form) {
+      var formLabel = document.createElement("p");
+      formLabel.className = "gemini-action-form";
+      formLabel.textContent = form;
+      elements.actionPanel.appendChild(formLabel);
+    }
+
+    if (buttons.length) {
+      var buttonsWrapper = document.createElement("div");
+      buttonsWrapper.className = "gemini-action-buttons";
+      buttons.forEach(function (button) {
+        var buttonElement = document.createElement("button");
+        buttonElement.className = "gemini-action-button";
+        buttonElement.type = "button";
+        buttonElement.textContent = button.label;
+        buttonElement.addEventListener("click", function () {
+          handleActionButtonClick(button);
+        });
+        buttonsWrapper.appendChild(buttonElement);
+      });
+      elements.actionPanel.appendChild(buttonsWrapper);
+    }
+
+    elements.actionPanel.hidden = false;
+  }
+
   function resetTranscripts() {
     state.inputTranscript = "";
     state.outputTranscript = "";
@@ -342,6 +430,7 @@
     if (elements.outputTranscript) {
       elements.outputTranscript.textContent = "";
     }
+    clearActionPanel();
   }
 
   function delay(ms) {
@@ -1445,6 +1534,7 @@
       }
 
       if (serverContent.inputTranscription && serverContent.inputTranscription.text) {
+        clearActionPanel();
         updateTranscript("user", serverContent.inputTranscription.text);
       }
 
@@ -1672,14 +1762,19 @@
 
     var contentType = (response.headers.get("content-type") || "").toLowerCase();
     if (contentType.indexOf("json") >= 0) {
-      return extractTextFromJourneyBuilderResponse(await response.json()) || "Journey Builder no devolvio texto.";
+      var jsonResult = normalizeJourneyBuilderResponse(await response.json());
+      renderActionPanel(jsonResult);
+      return jsonResult.text || "Journey Builder no devolvio texto.";
     }
 
     var rawText = await response.text();
     var parsed = tryParseJsonString(rawText);
     if (parsed !== null) {
-      return extractTextFromJourneyBuilderResponse(parsed) || rawText;
+      var parsedResult = normalizeJourneyBuilderResponse(parsed);
+      renderActionPanel(parsedResult);
+      return parsedResult.text || rawText;
     }
+    clearActionPanel();
     return rawText || "Journey Builder no devolvio texto.";
   }
 
@@ -1696,6 +1791,95 @@
     } catch (error) {
       return null;
     }
+  }
+
+  function normalizeJourneyBuilderResponse(value) {
+    var structured = findStructuredJourneyBuilderResponse(value, 0);
+    if (structured) {
+      return structured;
+    }
+
+    return {
+      text: extractTextFromJourneyBuilderResponse(value) || "",
+      form: "",
+      buttons: [],
+    };
+  }
+
+  function findStructuredJourneyBuilderResponse(value, depth) {
+    var currentDepth = depth || 0;
+    if (value === null || value === undefined || currentDepth > 8) {
+      return null;
+    }
+
+    if (typeof value === "string") {
+      var parsed = tryParseJsonString(value);
+      if (parsed !== null) {
+        return findStructuredJourneyBuilderResponse(parsed, currentDepth + 1);
+      }
+      return null;
+    }
+
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i += 1) {
+        var itemResult = findStructuredJourneyBuilderResponse(value[i], currentDepth + 1);
+        if (itemResult) {
+          return itemResult;
+        }
+      }
+      return null;
+    }
+
+    if (typeof value !== "object") {
+      return null;
+    }
+
+    var buttons = normalizeActionButtons(value.buttons);
+    var form = typeof value.form === "string" ? value.form.trim() : "";
+    var text = "";
+    var directKeys = ["respuesta", "response", "answer", "texto", "text", "message", "mensaje"];
+    for (var d = 0; d < directKeys.length; d += 1) {
+      var directValue = value[directKeys[d]];
+      if (typeof directValue === "string" && directValue.trim()) {
+        var parsedDirectValue = tryParseJsonString(directValue);
+        if (parsedDirectValue !== null) {
+          var directStructured = findStructuredJourneyBuilderResponse(parsedDirectValue, currentDepth + 1);
+          if (directStructured) {
+            return directStructured;
+          }
+        }
+        text = directValue.trim();
+        break;
+      }
+    }
+
+    if (text || form || buttons.length) {
+      return {
+        text: text || extractTextFromJourneyBuilderResponse(value),
+        form: form,
+        buttons: buttons,
+      };
+    }
+
+    var priorityKeys = ["result", "results", "outputs", "output", "data"];
+    for (var p = 0; p < priorityKeys.length; p += 1) {
+      if (priorityKeys[p] in value) {
+        var priorityResult = findStructuredJourneyBuilderResponse(value[priorityKeys[p]], currentDepth + 1);
+        if (priorityResult) {
+          return priorityResult;
+        }
+      }
+    }
+
+    var values = Object.values(value);
+    for (var v = 0; v < values.length; v += 1) {
+      var nestedResult = findStructuredJourneyBuilderResponse(values[v], currentDepth + 1);
+      if (nestedResult) {
+        return nestedResult;
+      }
+    }
+
+    return null;
   }
 
   function extractTextFromJourneyBuilderResponse(value, depth) {
@@ -1781,6 +1965,8 @@
       screenButton: document.getElementById("geminiScreenButton"),
       minimizeButton: document.getElementById("geminiMinimizeButton"),
       endButton: document.getElementById("geminiEndButton"),
+      transcriptPanel: document.getElementById("geminiTranscriptPanel"),
+      actionPanel: document.getElementById("geminiActionPanel"),
       inputTranscript: document.getElementById("geminiInputTranscript"),
       outputTranscript: document.getElementById("geminiOutputTranscript"),
       screenBadge: document.getElementById("geminiScreenBadge"),
@@ -1807,6 +1993,7 @@
 
   function init() {
     bindElements();
+    document.body.classList.toggle("gemini-transcripts-hidden", config.hideTranscripts);
     setOpen(config.view !== "widget" || config.autoStart);
     if (shouldUsePortraitAvatar()) {
       startPortraitAvatar();

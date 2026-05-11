@@ -66,10 +66,24 @@ Extra params:
 - `talking_head_view` defaults to `head`
 - `share_screen=1`
 - `greet_on_start=1`
+- `hide_transcripts=1` hides the live user/agent audio transcript panel
+- `show_buttons=1` renders action buttons when the Journey Builder flow returns them
 
 For production, prefer `gemini_token_url`; do not publish a long-lived Gemini API key in page
 markup. The endpoint can return either `{ "apiKey": "..." }` / `{ "api_key": "..." }`, or an
 ephemeral access token as `{ "access_token": "..." }`.
+
+The Gemini widget renders Journey Builder action buttons when the flow response contains:
+
+```json
+{
+  "respuesta": "Texto que el avatar debe responder",
+  "form": "Nombre opcional del formulario o paso",
+  "buttons": [
+    { "label": "Texto visible", "value": "Valor enviado al flujo" }
+  ]
+}
+```
 
 For Anam production use, prefer `anam_token_url`; create the session server-side with
 `personaConfig.enableAudioPassthrough: true`. The widget imports `@anam-ai/js-sdk` from esm.sh,

@@ -592,6 +592,58 @@ body.gemini-portrait-active .gemini-portrait-stage {
   word-break: break-word;
 }
 
+body.gemini-transcripts-hidden .gemini-transcript {
+  display: none;
+}
+
+.gemini-action-panel {
+  border-top: 1px solid var(--jb-border);
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.gemini-action-panel[hidden] {
+  display: none;
+}
+
+.gemini-action-form {
+  margin: 0 0 8px;
+  color: var(--jb-muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.gemini-action-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.gemini-action-button {
+  width: 100%;
+  border: 1px solid #cbd8ea;
+  border-radius: 8px;
+  background: #f7faff;
+  color: #0f172a;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.gemini-action-button:hover:not(:disabled) {
+  border-color: var(--jb-blue);
+  background: #eef5ff;
+  color: var(--jb-blue);
+}
+
+.gemini-action-button:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
 .gemini-controls {
   border-top: 1px solid var(--jb-border);
   background: #f7faff;

@@ -245,7 +245,7 @@
       <div id="geminiScreenBadge" class="gemini-screen-badge" hidden>Pantalla activa</div>
     </section>
 
-    <section class="gemini-transcript" aria-live="polite">
+    <section id="geminiTranscriptPanel" class="gemini-transcript" aria-live="polite">
       <div class="gemini-transcript-row">
         <span>Usuario</span>
         <p id="geminiInputTranscript"></p>
@@ -255,6 +255,8 @@
         <p id="geminiOutputTranscript"></p>
       </div>
     </section>
+
+    <section id="geminiActionPanel" class="gemini-action-panel" aria-live="polite" hidden></section>
 
     <footer class="gemini-controls">
       <button id="geminiStartButton" class="gemini-primary-button" type="button">Iniciar</button>
