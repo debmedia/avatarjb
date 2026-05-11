@@ -38,6 +38,48 @@ Example public URL:
 - `avatarCharacter`
 - `avatarStyle`
 
+## Experimental Gemini Live avatar
+
+This branch also includes a separate prototype entrypoint:
+
+- `gemini-live.html`
+- `css/gemini-live.css`
+- `js/gemini-live-avatar.js`
+
+It keeps the existing Azure avatar path untouched. The Gemini variant streams microphone audio
+directly to Gemini Live, plays Gemini audio output in the browser, drives a lightweight local
+mouth animation from audio energy, and exposes one function call named
+`consultar_journey_builder` that posts to the configured Journey Builder flow.
+
+Extra params:
+
+- `chat_url=.../gemini-live.html`
+- `gemini_api_key` for local demos, or `gemini_token_url` for a backend credentials endpoint
+- `gemini_model` defaults to `gemini-3.1-flash-live-preview`
+- `anam_session_token` short-lived Anam session token for local testing
+- `anam_token_url` backend endpoint that returns `{ "sessionToken": "..." }`
+- `anam_audio_sample_rate` defaults to `16000`
+- `avatar_mode=deer2d` enables the default lightweight ChileAtiende demo avatar
+- `avatar_mode=anam` enables the Anam avatar prototype when token config is present
+- `avatar_mode=talkinghead` enables the free browser 3D avatar prototype
+- `talking_head_avatar_url` optional GLB URL for the TalkingHead avatar
+- `talking_head_view` defaults to `head`
+- `share_screen=1`
+- `greet_on_start=1`
+
+For production, prefer `gemini_token_url`; do not publish a long-lived Gemini API key in page
+markup. The endpoint can return either `{ "apiKey": "..." }` / `{ "api_key": "..." }`, or an
+ephemeral access token as `{ "access_token": "..." }`.
+
+For Anam production use, prefer `anam_token_url`; create the session server-side with
+`personaConfig.enableAudioPassthrough: true`. The widget imports `@anam-ai/js-sdk` from esm.sh,
+streams the Anam avatar into the local video element muted, and keeps Gemini Live as the audio
+playback source to avoid double audio.
+
+For the free TalkingHead prototype, the widget imports `met4citizen/TalkingHead` from jsDelivr
+and drives the avatar mouth from Gemini audio energy. This is a lightweight approximation, not
+phoneme-level lip-sync, because Gemini Live audio chunks do not include visemes.
+
 ## Embed examples
 
 ### Option A (recommended): script + tag attributes

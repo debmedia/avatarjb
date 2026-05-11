@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Journey Builder Gemini Avatar</title>
+  <script>
+    (function () {
+      var raw = window.__JB_AVATAR_QUERY__ || window.location.search || "";
+      var params = new URLSearchParams(raw.charAt(0) === "?" ? raw.slice(1) : raw);
+      var mode = String(params.get("avatar_mode") || params.get("avatarMode") || "")
+        .trim()
+        .toLowerCase()
+        .replace(/-/g, "_");
+
+      if (mode === "" || mode === "deer" || mode === "deer2d" || mode === "deer_2d" || mode === "squirrel" || mode === "squirrel2d" || mode === "squirrel_2d") {
+        document.documentElement.classList.add("jb-avatar-initial-deer");
+      }
+      if (mode === "portrait" || mode === "portrait2d" || mode === "portrait_2d" || mode === "human" || mode === "human2d" || mode === "human_2d") {
+        document.documentElement.classList.add("jb-avatar-initial-portrait");
+      }
+      if (mode === "talkinghead" || mode === "talking_head") {
+        document.documentElement.classList.add("jb-avatar-initial-talkinghead");
+      }
+    })();
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+        "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
+      }
+    }
+  </script>
+  <link href="./css/gemini-live.css?v=20260507r" rel="stylesheet">
+  <script src="./js/gemini-live-avatar.js?v=20260507r" defer></script>
+</head>
+<body class="gemini-avatar-page">
+  <button
+    id="geminiAvatarFab"
+    class="gemini-avatar-fab"
+    type="button"
+    aria-expanded="false"
+    aria-label="Abrir avatar">
+    JB
+  </button>
+
+  <main id="geminiAvatarWidget" class="gemini-avatar-widget" aria-hidden="true">
+    <header class="gemini-avatar-header">
+      <div class="gemini-avatar-title">
+        <img src="./image/numia-icon-positive.svg" alt="" aria-hidden="true">
+        <div>
+          <h1>ChileAtiende</h1>
+          <p>
+            <span id="geminiStatusDot" class="gemini-status-dot"></span>
+            <span id="geminiStatusText">Listo</span>
+          </p>
+        </div>
+      </div>
+      <div class="gemini-window-actions">
+        <button id="geminiMinimizeButton" class="gemini-icon-button" type="button" aria-label="Minimizar avatar" title="Minimizar avatar">-</button>
+        <button id="geminiEndButton" class="gemini-icon-button gemini-danger-button" type="button" aria-label="Cerrar sesion" title="Cerrar sesion">x</button>
+      </div>
+    </header>
+
+    <section class="gemini-avatar-stage" aria-label="Avatar de atencion">
+      <div id="geminiAvatarHead" class="gemini-avatar-person" aria-hidden="true">
+        <div
+          id="talkingHeadStage"
+          class="gemini-talkinghead-stage"
+          aria-hidden="true"
+          hidden>
+        </div>
+        <video
+          id="anamVideo"
+          class="gemini-anam-video"
+          autoplay
+          playsinline
+          muted
+          hidden>
+        </video>
+        <div
+          id="deerAvatarStage"
+          class="gemini-deer-stage"
+          aria-hidden="true"
+          hidden>
+          <svg class="gemini-deer" viewBox="0 0 320 320" role="img" aria-label="Avatar animado">
+            <defs>
+              <filter id="deerSoftShadow" x="-20%" y="-20%" width="140%" height="150%">
+                <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#7d4b2d" flood-opacity="0.16"></feDropShadow>
+              </filter>
+            </defs>
+
+            <rect width="320" height="320" rx="16" fill="#ffffff"></rect>
+            <g class="deer-idle" filter="url(#deerSoftShadow)">
+              <g class="deer-antlers" fill="none" stroke="#87502f" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M126 102 C107 82 100 59 103 39"></path>
+                <path d="M107 66 L86 53"></path>
+                <path d="M112 79 L91 82"></path>
+                <path d="M194 102 C213 82 220 59 217 39"></path>
+                <path d="M213 66 L234 53"></path>
+                <path d="M208 79 L229 82"></path>
+              </g>
+
+              <g class="deer-ears">
+                <path d="M116 128 C82 105 66 89 48 88 C52 119 82 140 119 139 Z" fill="#c77349"></path>
+                <path d="M109 126 C84 109 74 99 61 97 C69 114 90 127 112 131 Z" fill="#f0b38e"></path>
+                <path d="M204 128 C238 105 254 89 272 88 C268 119 238 140 201 139 Z" fill="#c77349"></path>
+                <path d="M211 126 C236 109 246 99 259 97 C251 114 230 127 208 131 Z" fill="#f0b38e"></path>
+              </g>
+
+              <path class="deer-face" d="M87 144 C89 97 119 76 160 76 C201 76 231 97 233 144 C233 195 202 229 160 229 C118 229 87 195 87 144 Z" fill="#c9804e"></path>
+              <path d="M160 80 C144 99 135 126 135 160 C135 196 146 219 160 228 C174 219 185 196 185 160 C185 126 176 99 160 80 Z" fill="#d89560" opacity="0.5"></path>
+              <g class="deer-spots" fill="#a75f3f" opacity="0.52">
+                <circle cx="146" cy="102" r="2.8"></circle>
+                <circle cx="157" cy="98" r="2.5"></circle>
+                <circle cx="168" cy="102" r="2.8"></circle>
+                <circle cx="140" cy="113" r="2.5"></circle>
+                <circle cx="152" cy="111" r="2.3"></circle>
+                <circle cx="164" cy="111" r="2.3"></circle>
+                <circle cx="176" cy="113" r="2.5"></circle>
+              </g>
+
+              <g class="deer-eyes">
+                <g class="deer-eye deer-eye-left">
+                  <circle cx="128" cy="145" r="7.5" fill="#2f2724"></circle>
+                  <circle cx="125" cy="142" r="2.4" fill="#fff"></circle>
+                </g>
+                <g class="deer-eye deer-eye-right">
+                  <circle cx="192" cy="145" r="7.5" fill="#2f2724"></circle>
+                  <circle cx="189" cy="142" r="2.4" fill="#fff"></circle>
+                </g>
+              </g>
+
+              <g class="deer-muzzle">
+                <circle cx="132" cy="169" r="14" fill="#f59b7c" opacity="0.92"></circle>
+                <circle cx="188" cy="169" r="14" fill="#f59b7c" opacity="0.92"></circle>
+                <ellipse cx="160" cy="177" rx="27" ry="25" fill="#f5c7a8"></ellipse>
+                <path d="M160 156 C149 156 143 162 145 169 C149 176 155 179 160 179 C165 179 171 176 175 169 C177 162 171 156 160 156 Z" fill="#5a3728"></path>
+                <path class="deer-mouth-stem" d="M160 178 V188" fill="none" stroke="#5a3728" stroke-width="4" stroke-linecap="round"></path>
+                <g class="deer-mouth">
+                  <path class="deer-smile-left" d="M160 189 C153 198 142 199 137 191" fill="none" stroke="#5a3728" stroke-width="4" stroke-linecap="round"></path>
+                  <path class="deer-smile-right" d="M160 189 C167 198 178 199 183 191" fill="none" stroke="#5a3728" stroke-width="4" stroke-linecap="round"></path>
+                  <ellipse class="deer-mouth-hole" cx="160" cy="195" rx="11" ry="6" fill="#3d241d"></ellipse>
+                  <path class="deer-mouth-highlight" d="M151 194 C155 197 165 197 169 194" fill="none" stroke="#f0aa8c" stroke-width="3" stroke-linecap="round" opacity="0.72"></path>
+                </g>
+              </g>
+            </g>
+          </svg>
+        </div>
+        <div
+          id="portraitAvatarStage"
+          class="gemini-portrait-stage"
+          aria-hidden="true"
+          hidden>
+          <svg class="gemini-human" viewBox="0 0 320 320" role="img" aria-label="Avatar humano animado">
+            <defs>
+              <linearGradient id="humanSkin" x1="0.18" y1="0" x2="0.9" y2="1">
+                <stop offset="0" stop-color="#ffc197"></stop>
+                <stop offset="0.52" stop-color="#f0a676"></stop>
+                <stop offset="1" stop-color="#ce7b50"></stop>
+              </linearGradient>
+              <linearGradient id="humanHair" x1="0.2" y1="0" x2="0.85" y2="1">
+                <stop offset="0" stop-color="#7a4b2b"></stop>
+                <stop offset="1" stop-color="#322014"></stop>
+              </linearGradient>
+              <linearGradient id="humanShirt" x1="0.1" y1="0" x2="0.92" y2="1">
+                <stop offset="0" stop-color="#222326"></stop>
+                <stop offset="1" stop-color="#111214"></stop>
+              </linearGradient>
+              <filter id="humanShadow" x="-20%" y="-20%" width="140%" height="150%">
+                <feDropShadow dx="0" dy="9" stdDeviation="9" flood-color="#102238" flood-opacity="0.15"></feDropShadow>
+              </filter>
+            </defs>
+
+            <rect width="320" height="320" rx="18" fill="#f8fafc"></rect>
+            <g class="human-idle" filter="url(#humanShadow)">
+              <path d="M51 319 C61 270 101 250 160 250 C219 250 259 270 269 319 Z" fill="url(#humanShirt)"></path>
+              <path d="M118 245 C122 222 126 205 128 189 H192 C194 205 198 222 202 245 C192 260 178 267 160 267 C142 267 128 260 118 245 Z" fill="url(#humanSkin)"></path>
+              <path d="M115 253 C127 276 193 276 205 253 C193 284 127 284 115 253 Z" fill="#0f1012" opacity="0.46"></path>
+
+              <path class="human-ear-left" d="M92 130 C75 129 70 153 81 171 C87 181 97 174 99 161 Z" fill="#e79a6d"></path>
+              <path class="human-ear-right" d="M228 130 C245 129 250 153 239 171 C233 181 223 174 221 161 Z" fill="#d98c62"></path>
+              <path class="human-face" d="M96 136 C96 83 119 51 160 51 C201 51 224 83 224 136 C224 203 196 239 160 239 C124 239 96 203 96 136 Z" fill="url(#humanSkin)"></path>
+              <path d="M160 63 C177 96 178 154 171 183 C166 204 164 223 160 235 C177 226 191 207 198 180 C208 141 203 85 160 63 Z" fill="#c97952" opacity="0.18"></path>
+
+              <path class="human-hair-base" d="M94 130 C89 86 105 48 143 36 C179 25 216 44 226 82 C229 98 227 116 222 136 C217 91 199 72 165 72 C130 72 105 91 94 130 Z" fill="url(#humanHair)"></path>
+              <g class="human-hair-lines" stroke="#9a6338" stroke-width="3" stroke-linecap="round" opacity="0.45">
+                <path d="M118 68 C133 51 151 45 173 45"></path>
+                <path d="M130 62 C146 53 164 50 192 58"></path>
+                <path d="M104 91 C119 76 136 69 159 68"></path>
+                <path d="M196 62 C209 75 216 92 218 112"></path>
+              </g>
+
+              <path class="human-beard" d="M102 169 C114 170 121 185 131 196 C143 209 177 209 189 196 C199 185 206 170 218 169 C213 210 190 238 160 238 C130 238 107 210 102 169 Z" fill="#51321f" opacity="0.94"></path>
+              <path d="M120 176 C133 190 146 197 160 197 C174 197 187 190 200 176 C193 209 179 224 160 224 C141 224 127 209 120 176 Z" fill="#7b4a2d" opacity="0.42"></path>
+
+              <g class="human-eyebrows" fill="#694124">
+                <path class="human-brow-left" d="M116 116 C129 110 143 111 153 117 C141 115 130 115 118 121 Z"></path>
+                <path class="human-brow-right" d="M167 117 C177 111 191 110 204 116 C192 115 179 115 169 121 Z"></path>
+              </g>
+
+              <g class="human-eyes">
+                <g class="human-eye human-eye-left">
+                  <path d="M120 136 C126 130 140 130 146 136 C140 143 126 143 120 136 Z" fill="#f7eadb"></path>
+                  <circle cx="133" cy="136.5" r="5.5" fill="#4d7f91"></circle>
+                  <circle cx="133" cy="136.5" r="3" fill="#14202a"></circle>
+                  <circle cx="130.5" cy="133.8" r="1.6" fill="#fff"></circle>
+                  <rect class="human-eyelid" x="119" y="129" width="28" height="16" rx="8" fill="#e29a70"></rect>
+                </g>
+                <g class="human-eye human-eye-right">
+                  <path d="M174 136 C180 130 194 130 200 136 C194 143 180 143 174 136 Z" fill="#f7eadb"></path>
+                  <circle cx="187" cy="136.5" r="5.5" fill="#4d7f91"></circle>
+                  <circle cx="187" cy="136.5" r="3" fill="#14202a"></circle>
+                  <circle cx="184.5" cy="133.8" r="1.6" fill="#fff"></circle>
+                  <rect class="human-eyelid" x="173" y="129" width="28" height="16" rx="8" fill="#d89067"></rect>
+                </g>
+              </g>
+
+              <path class="human-nose" d="M158 144 C153 157 148 168 151 173 C155 178 165 178 169 173 C172 168 167 157 162 144" fill="none" stroke="#b96f4b" stroke-width="4" stroke-linecap="round" opacity="0.45"></path>
+
+              <g class="human-mouth">
+                <path class="human-smile" d="M136 184 C148 192 172 192 184 184" fill="none" stroke="#522f22" stroke-width="4" stroke-linecap="round"></path>
+                <ellipse class="human-mouth-hole" cx="160" cy="187" rx="17" ry="6" fill="#2d1714"></ellipse>
+                <path class="human-lip" d="M143 185 C151 189 169 189 177 185" fill="none" stroke="#f1a07e" stroke-width="3" stroke-linecap="round" opacity="0.7"></path>
+              </g>
+            </g>
+          </svg>
+        </div>
+        <div class="gemini-avatar-presence">
+          <span></span>
+          En linea
+        </div>
+        <div class="gemini-audio-meter" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+      <div id="geminiScreenBadge" class="gemini-screen-badge" hidden>Pantalla activa</div>
+    </section>
+
+    <section class="gemini-transcript" aria-live="polite">
+      <div class="gemini-transcript-row">
+        <span>Usuario</span>
+        <p id="geminiInputTranscript"></p>
+      </div>
+      <div class="gemini-transcript-row">
+        <span>Agente</span>
+        <p id="geminiOutputTranscript"></p>
+      </div>
+    </section>
+
+    <footer class="gemini-controls">
+      <button id="geminiStartButton" class="gemini-primary-button" type="button">Iniciar</button>
+      <button id="geminiMuteButton" type="button" disabled>Mutear</button>
+      <button id="geminiScreenButton" type="button" disabled>Compartir pantalla</button>
+    </footer>
+  </main>
+</body>
+</html>

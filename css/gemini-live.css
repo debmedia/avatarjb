@@ -1,0 +1,640 @@
+:root {
+  --jb-blue: #0f5fff;
+  --jb-blue-dark: #0a43b7;
+  --jb-ink: #142033;
+  --jb-muted: #647084;
+  --jb-panel: #ffffff;
+  --jb-soft: #eef4fb;
+  --jb-border: #d6deea;
+  --jb-danger: #c8483d;
+  --jb-success: #1a9f6f;
+  --jb-teal: #14a6a0;
+  --mouth-open: 0;
+  --speech-level: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body.gemini-avatar-page {
+  overflow: hidden;
+  font-family: "Nunito Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--jb-ink);
+  background: transparent;
+}
+
+button {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #e8eef7;
+  color: var(--jb-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  min-height: 36px;
+  padding: 0 12px;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: #dfe8f6;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gemini-avatar-fab {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 84px;
+  height: 84px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(145deg, var(--jb-blue), var(--jb-teal));
+  color: #fff;
+  box-shadow: 0 16px 38px rgba(15, 95, 255, 0.32);
+  font-size: 18px;
+}
+
+.gemini-avatar-widget {
+  width: 100%;
+  height: 100%;
+  background: var(--jb-panel);
+  border: 1px solid var(--jb-border);
+  border-radius: 18px;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.gemini-avatar-widget[aria-hidden="true"] {
+  display: none;
+}
+
+.gemini-avatar-header {
+  min-height: 64px;
+  padding: 12px;
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gemini-avatar-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gemini-avatar-title img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.gemini-avatar-title h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.gemini-avatar-title p {
+  margin: 5px 0 0;
+  color: var(--jb-muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.gemini-avatar-title p span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.gemini-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--jb-success);
+  box-shadow: 0 0 0 4px rgba(26, 159, 111, 0.14);
+  flex: 0 0 auto;
+}
+
+.gemini-status-dot.is-error {
+  background: var(--jb-danger);
+  box-shadow: 0 0 0 4px rgba(200, 72, 61, 0.16);
+}
+
+.gemini-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gemini-icon-button {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: #ccd7e5;
+  font-size: 16px;
+}
+
+.gemini-danger-button {
+  color: #fff;
+  background: var(--jb-danger);
+}
+
+.gemini-danger-button:hover:not(:disabled) {
+  background: #ab3a32;
+}
+
+.gemini-avatar-stage {
+  position: relative;
+  min-height: 282px;
+  background:
+    linear-gradient(180deg, rgba(7, 18, 35, 0.08), rgba(7, 18, 35, 0)),
+    #6b6564;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.gemini-avatar-person {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.18), transparent 38%),
+    #6b6564;
+}
+
+.gemini-avatar-person::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 16, 34, 0) 45%, rgba(5, 16, 34, 0.2) 100%);
+  pointer-events: none;
+}
+
+.gemini-avatar-person img,
+.gemini-anam-video,
+.gemini-talkinghead-stage,
+.gemini-deer-stage,
+.gemini-portrait-stage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: 50% 50%;
+  display: block;
+  transform: scale(1.02);
+  transition: transform 160ms ease;
+}
+
+.gemini-anam-video {
+  object-fit: cover;
+  background: #111827;
+}
+
+.gemini-talkinghead-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.2), transparent 38%),
+    linear-gradient(180deg, #dae6f2 0%, #eef5fb 46%, #c7d6e5 100%);
+  transform: none;
+}
+
+.gemini-deer-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  transform: none;
+}
+
+.gemini-deer {
+  width: min(76%, 252px);
+  aspect-ratio: 1;
+  display: block;
+  overflow: visible;
+}
+
+.deer-idle {
+  transform-box: fill-box;
+  transform-origin: 50% 58%;
+  animation: deer-idle 5.8s ease-in-out infinite;
+}
+
+.deer-eye {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: deer-blink 5.2s ease-in-out infinite;
+}
+
+.deer-eye-right {
+  animation-delay: 40ms;
+}
+
+.deer-mouth {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  transform: translateY(calc(var(--mouth-open) * 2px));
+  transition: transform 44ms linear;
+}
+
+.deer-mouth-hole {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  transform:
+    translateY(calc(var(--mouth-open) * 3px))
+    scaleX(calc(0.22 + (var(--mouth-open) * 0.98)))
+    scaleY(calc(0.08 + (var(--mouth-open) * 1.08)));
+  transition: transform 44ms linear;
+}
+
+.deer-smile-left,
+.deer-smile-right {
+  opacity: calc(1 - (var(--mouth-open) * 0.66));
+  transition: opacity 44ms linear;
+}
+
+.deer-mouth-highlight {
+  opacity: calc(var(--mouth-open) * 0.68);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: translateY(calc(var(--mouth-open) * 4px));
+  transition: opacity 44ms linear, transform 44ms linear;
+}
+
+body.gemini-deer-active #geminiFallbackAvatar,
+html.jb-avatar-initial-deer #geminiFallbackAvatar,
+body.gemini-deer-active .gemini-anam-video,
+body.gemini-deer-active .gemini-talkinghead-stage,
+body.gemini-deer-active .gemini-portrait-stage {
+  display: none;
+}
+
+.gemini-portrait-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.92), rgba(244, 247, 251, 0.98) 58%, #eef3f8 100%);
+  transform: none;
+}
+
+.gemini-human {
+  width: min(82%, 292px);
+  aspect-ratio: 1;
+  display: block;
+  overflow: visible;
+}
+
+.human-idle {
+  transform-box: fill-box;
+  transform-origin: 50% 58%;
+  animation: portrait-idle 6.2s ease-in-out infinite;
+}
+
+.human-eyelid {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  transform: scaleY(0);
+  animation: portrait-blink 5.4s ease-in-out infinite;
+}
+
+.human-eye-right .human-eyelid {
+  animation-delay: 42ms;
+}
+
+.human-brow-left,
+.human-brow-right {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition: transform 90ms ease, opacity 90ms ease;
+}
+
+.human-brow-left {
+  transform: translateY(calc(var(--speech-level) * -2px)) rotate(calc(var(--speech-level) * -3deg));
+}
+
+.human-brow-right {
+  transform: translateY(calc(var(--speech-level) * -2px)) rotate(calc(var(--speech-level) * 3deg));
+}
+
+.human-mouth {
+  transform-box: fill-box;
+  transform-origin: 50% 8%;
+  transform: translateY(calc(var(--mouth-open) * 1.6px));
+  transition: transform 44ms linear;
+}
+
+.human-mouth-hole {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  opacity: calc(var(--mouth-open) * 0.86);
+  transform:
+    translateY(calc(var(--mouth-open) * 1.8px))
+    scaleX(calc(0.26 + (var(--mouth-open) * 0.86)))
+    scaleY(calc(0.12 + (var(--mouth-open) * 1.02)));
+  transition: opacity 44ms linear, transform 44ms linear;
+}
+
+.human-smile {
+  opacity: calc(1 - (var(--mouth-open) * 0.42));
+  transition: opacity 44ms linear;
+}
+
+.human-lip {
+  opacity: calc(var(--mouth-open) * 0.68);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transform: translateY(calc(var(--mouth-open) * 2.5px));
+  transition: opacity 44ms linear, transform 44ms linear;
+}
+
+body.gemini-portrait-active #geminiFallbackAvatar,
+html.jb-avatar-initial-portrait #geminiFallbackAvatar,
+body.gemini-portrait-active .gemini-anam-video,
+body.gemini-portrait-active .gemini-talkinghead-stage,
+body.gemini-portrait-active .gemini-deer-stage {
+  display: none;
+}
+
+.gemini-talkinghead-stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+body.gemini-anam-active #geminiFallbackAvatar {
+  display: none;
+}
+
+body.gemini-talkinghead-active #geminiFallbackAvatar,
+html.jb-avatar-initial-talkinghead #geminiFallbackAvatar,
+body.gemini-talkinghead-active .gemini-anam-video,
+body.gemini-talkinghead-active .gemini-deer-stage,
+body.gemini-talkinghead-active .gemini-portrait-stage {
+  display: none;
+}
+
+body.gemini-deer-active .gemini-deer-stage {
+  display: grid;
+}
+
+body.gemini-portrait-active .gemini-portrait-stage {
+  display: grid;
+}
+
+@keyframes portrait-idle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  45% {
+    transform: translateY(1.5px) rotate(-0.35deg);
+  }
+
+  75% {
+    transform: translateY(-1px) rotate(0.35deg);
+  }
+}
+
+@keyframes portrait-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(0);
+  }
+
+  93%,
+  95% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes deer-idle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  35% {
+    transform: translateY(2px) rotate(-1deg);
+  }
+
+  70% {
+    transform: translateY(-1px) rotate(1deg);
+  }
+}
+
+@keyframes deer-blink {
+  0%,
+  89%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  93%,
+  95% {
+    transform: scaleY(0.12);
+  }
+}
+
+.gemini-avatar-presence {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 999px;
+  background: rgba(7, 18, 35, 0.54);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 7px 10px;
+  backdrop-filter: blur(9px);
+}
+
+.gemini-avatar-presence span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #38d389;
+  box-shadow: 0 0 0 4px rgba(56, 211, 137, 0.2);
+}
+
+.gemini-audio-meter {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  box-shadow: 0 10px 26px rgba(5, 16, 34, 0.18);
+}
+
+.gemini-audio-meter span {
+  width: 4px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--jb-blue);
+  transform: scaleY(calc(0.28 + (var(--speech-level) * 0.9)));
+  transform-origin: 50% 50%;
+  transition: transform 70ms linear;
+}
+
+.gemini-audio-meter span:nth-child(2) {
+  transform: scaleY(calc(0.38 + (var(--speech-level) * 1.2)));
+}
+
+.gemini-audio-meter span:nth-child(3) {
+  transform: scaleY(calc(0.34 + (var(--speech-level) * 1)));
+}
+
+.gemini-audio-meter span:nth-child(4) {
+  transform: scaleY(calc(0.26 + (var(--speech-level) * 0.72)));
+}
+
+.gemini-screen-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  border: 1px solid rgba(20, 166, 160, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 7px 10px;
+}
+
+.gemini-transcript {
+  flex: 1 1 auto;
+  min-height: 122px;
+  padding: 10px 12px 0;
+  overflow: auto;
+  background: #fff;
+}
+
+.gemini-transcript-row {
+  border: 1px solid #e0e7f1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: #fbfdff;
+}
+
+.gemini-transcript-row span {
+  color: var(--jb-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gemini-transcript-row p {
+  min-height: 18px;
+  margin: 4px 0 0;
+  color: var(--jb-ink);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.gemini-controls {
+  border-top: 1px solid var(--jb-border);
+  background: #f7faff;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.gemini-primary-button {
+  grid-column: 1 / -1;
+  background: var(--jb-blue);
+  color: #fff;
+}
+
+.gemini-primary-button:hover:not(:disabled) {
+  background: var(--jb-blue-dark);
+}
+
+body.gemini-avatar-speaking .gemini-avatar-person {
+  animation: gemini-breath 1050ms ease-in-out infinite;
+}
+
+body.gemini-avatar-speaking .gemini-avatar-person img {
+  transform: scale(1.035);
+}
+
+@keyframes gemini-breath {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@media (max-width: 360px), (max-height: 500px) {
+  .gemini-avatar-stage {
+    min-height: 226px;
+  }
+
+  .gemini-transcript {
+    min-height: 98px;
+  }
+}

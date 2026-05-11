@@ -76,6 +76,33 @@
         keys: ["speech_private_endpoint", "speech-private-endpoint", "speechPrivateEndpoint"],
         param: "speechPrivateEndpoint",
       },
+      { keys: ["gemini_api_key", "gemini-api-key", "geminiApiKey"], param: "geminiApiKey" },
+      { keys: ["gemini_model", "gemini-model", "geminiModel"], param: "geminiModel" },
+      { keys: ["gemini_token_url", "gemini-token-url", "geminiTokenUrl"], param: "geminiTokenUrl" },
+      { keys: ["gemini_token_method", "gemini-token-method", "geminiTokenMethod"], param: "geminiTokenMethod" },
+      { keys: ["anam_session_token", "anam-session-token", "anamSessionToken"], param: "anamSessionToken" },
+      { keys: ["anam_token_url", "anam-token-url", "anamTokenUrl"], param: "anamTokenUrl" },
+      { keys: ["anam_token_method", "anam-token-method", "anamTokenMethod"], param: "anamTokenMethod" },
+      { keys: ["anam_sdk_url", "anam-sdk-url", "anamSdkUrl"], param: "anamSdkUrl" },
+      { keys: ["anam_audio_sample_rate", "anam-audio-sample-rate", "anamAudioSampleRate"], param: "anamAudioSampleRate" },
+      { keys: ["avatar_mode", "avatar-mode", "avatarMode"], param: "avatarMode" },
+      {
+        keys: ["talking_head_module_url", "talking-head-module-url", "talkingHeadModuleUrl"],
+        param: "talkingHeadModuleUrl",
+      },
+      {
+        keys: ["talking_head_avatar_url", "talking-head-avatar-url", "talkingHeadAvatarUrl"],
+        param: "talkingHeadAvatarUrl",
+      },
+      { keys: ["talking_head_body", "talking-head-body", "talkingHeadBody"], param: "talkingHeadBody" },
+      { keys: ["talking_head_view", "talking-head-view", "talkingHeadView"], param: "talkingHeadView" },
+      {
+        keys: ["talking_head_lipsync_lang", "talking-head-lipsync-lang", "talkingHeadLipsyncLang"],
+        param: "talkingHeadLipsyncLang",
+      },
+      { keys: ["system_prompt", "system-prompt", "systemPrompt"], param: "systemPrompt" },
+      { keys: ["share_screen", "share-screen", "shareScreen"], param: "shareScreen" },
+      { keys: ["greet_on_start", "greet-on-start", "greetOnStart"], param: "greetOnStart" },
       { keys: ["tts_voice", "tts-voice", "ttsVoice"], param: "ttsVoice" },
       { keys: ["avatar_character", "avatar-character", "avatarCharacter"], param: "avatarCharacter" },
       { keys: ["avatar_style", "avatar-style", "avatarStyle"], param: "avatarStyle" },
@@ -108,7 +135,7 @@
       title: getParamOrAttr("title", ["title"], "Journey Builder Avatar"),
       width: getParamOrAttr("width", ["width"], "84"),
       height: getParamOrAttr("height", ["height"], "84"),
-      allow: getParamOrAttr("allow", ["allow"], "microphone"),
+      allow: getParamOrAttr("allow", ["allow"], "microphone; display-capture; autoplay"),
       style: getParamOrAttr("style", ["style"], DEFAULT_FRAME_STYLE),
     };
   }
@@ -153,6 +180,53 @@
     return iframe;
   }
 
+  function applyWidgetFrameState(iframe, open) {
+    iframe.style.position = "fixed";
+    iframe.style.left = "";
+    iframe.style.top = "";
+    iframe.style.right = "max(12px, 2vw)";
+    iframe.style.bottom = "max(12px, 2vw)";
+    iframe.style.border = "0";
+    iframe.style.background = "transparent";
+    iframe.style.overflow = "hidden";
+
+    if (!open) {
+      iframe.width = "84";
+      iframe.height = "84";
+      iframe.style.width = "84px";
+      iframe.style.height = "84px";
+      iframe.style.maxWidth = "84px";
+      iframe.style.maxHeight = "84px";
+      iframe.style.borderRadius = "0";
+      iframe.style.boxShadow = "none";
+      return;
+    }
+
+    iframe.width = "380";
+    iframe.height = "560";
+    iframe.style.width = "min(380px, calc(100vw - 24px))";
+    iframe.style.height = "min(560px, calc(100vh - 24px))";
+    iframe.style.maxWidth = "380px";
+    iframe.style.maxHeight = "560px";
+    iframe.style.borderRadius = "18px";
+    iframe.style.boxShadow = "0 22px 48px rgba(15, 23, 42, 0.28)";
+  }
+
+  function attachFrameMessageBridge(iframe) {
+    window.addEventListener("message", function (event) {
+      if (event.source !== iframe.contentWindow) {
+        return;
+      }
+
+      var data = event.data || {};
+      if (!data || data.type !== "journey-builder-avatar:frame") {
+        return;
+      }
+
+      applyWidgetFrameState(iframe, Boolean(data.open));
+    });
+  }
+
   function mount(scriptTag, targetElement) {
     var scriptUrl = new URL(scriptTag.src, window.location.href);
     var baseParams = new URLSearchParams(scriptUrl.search);
@@ -162,6 +236,7 @@
     var iframeConfig = getIframeConfig(scriptUrl, targetElement);
     var iframe = createIframe(scriptTag, iframeConfig, targetElement);
     var avatarUrls = buildAvatarUrls(mergedParams, scriptUrl);
+    attachFrameMessageBridge(iframe);
 
     if (!isJsDelivrHtmlUrl(avatarUrls.chatHtmlUrl)) {
       iframe.setAttribute("src", avatarUrls.avatarUrl);
