@@ -35,17 +35,19 @@ LiveAvatar session creation and WebRTC handoff are the next piece.
 
 ## Local configuration
 
-Copy the example env file and fill it with your LiveAvatar values:
+Copy the example env file and fill it with your Gemini / HeyGen / LiveAvatar values:
 
 ```powershell
-Copy-Item .env.liveavatar.example .env.liveavatar
-notepad .env.liveavatar
+Copy-Item .env.example .env
+notepad .env
 ```
 
-`.env.liveavatar` is ignored by Git. The bridge also accepts regular environment variables if you
-prefer setting them in the current shell:
+`.env` is ignored by Git. The bridge also accepts regular environment variables if you prefer
+setting them in the current shell:
 
 ```powershell
+$env:GEMINI_API_KEY="AIza..."
+$env:HEYGEN_API_KEY="..."
 $env:LIVEAVATAR_API_KEY="la_..."
 $env:LIVEAVATAR_AVATAR_ID="00000000-0000-0000-0000-000000000000"
 $env:LIVEAVATAR_IS_SANDBOX="true"

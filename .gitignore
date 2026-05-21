@@ -7,6 +7,7 @@ __pycache__/
 logs/
 avatar-a2f-metrics-*.json
 vendor/
+.env
 .env.liveavatar
 
 # Heavy local avatar source/build artifacts.

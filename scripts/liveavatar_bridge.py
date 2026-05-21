@@ -34,7 +34,8 @@ from typing import Any
 import websockets
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ENV_FILE = ROOT / ".env.liveavatar"
+DEFAULT_ENV_FILE = ROOT / ".env"
+LEGACY_ENV_FILE = ROOT / ".env.liveavatar"
 
 
 @dataclass
@@ -61,8 +62,16 @@ def load_env_file(path: Path) -> None:
             os.environ[key] = value
 
 
+def load_env_files(primary_path: Path) -> None:
+    load_env_file(primary_path)
+    if primary_path != LEGACY_ENV_FILE:
+        load_env_file(LEGACY_ENV_FILE)
+
+
 def env_summary() -> dict[str, bool]:
     return {
+        "GEMINI_API_KEY": bool(os.getenv("GEMINI_API_KEY")),
+        "HEYGEN_API_KEY": bool(os.getenv("HEYGEN_API_KEY")),
         "LIVEAVATAR_API_KEY": bool(os.getenv("LIVEAVATAR_API_KEY")),
         "LIVEAVATAR_AVATAR_ID": bool(os.getenv("LIVEAVATAR_AVATAR_ID")),
         "LIVEAVATAR_IS_SANDBOX": bool(os.getenv("LIVEAVATAR_IS_SANDBOX")),
@@ -126,7 +135,7 @@ def avatars_from_response(payload: Any) -> list[dict[str, Any]]:
 
 async def fetch_liveavatar_avatars(scope: str) -> list[dict[str, Any]]:
     if not os.getenv("LIVEAVATAR_API_KEY"):
-        raise RuntimeError("Falta LIVEAVATAR_API_KEY en .env.liveavatar")
+        raise RuntimeError("Falta LIVEAVATAR_API_KEY en .env")
     path = "/v1/avatars/public" if scope == "public" else "/v1/avatars"
     url = f"{liveavatar_api_base()}{path}"
 
@@ -218,7 +227,7 @@ async def main() -> None:
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE))
     args = parser.parse_args()
-    load_env_file(Path(args.env_file))
+    load_env_files(Path(args.env_file))
 
     async with websockets.serve(handle_client, args.host, args.port):
         print(f"LiveAvatar bridge listening on ws://{args.host}:{args.port}/liveavatar")
