@@ -45,6 +45,8 @@ const state = {
   geminiSocket: null,
   geminiReady: false,
   geminiEndpointWaiters: [],
+  geminiAudioInputPaused: true,
+  geminiAudioStreamOpen: false,
   starting: false,
   muted: false,
   closingManually: false,
@@ -1022,10 +1024,26 @@ function sendGeminiMessage(payload, label) {
   return true;
 }
 
+function pauseGeminiAudioInput(reason = "pause") {
+  state.geminiAudioInputPaused = true;
+  if (!state.geminiAudioStreamOpen || !state.geminiReady) return;
+  sendGeminiMessage({
+    realtimeInput: {
+      audioStreamEnd: true,
+    },
+  }, `realtimeInput.audioStreamEnd:${reason}`);
+  state.geminiAudioStreamOpen = false;
+}
+
+function resumeGeminiAudioInput() {
+  state.geminiAudioInputPaused = false;
+}
+
 function sendClientText(text) {
   const value = String(text || "").trim();
   if (!value) return;
   state.lastUserText = value;
+  pauseGeminiAudioInput("clientContent");
   sendGeminiMessage({
     clientContent: {
       turns: [
@@ -1107,6 +1125,7 @@ async function executeFunctionCall(functionCall) {
 async function handleToolCall(toolCall) {
   const calls = functionCallsFromToolCall(toolCall);
   if (!calls.length || !state.geminiSocket || state.geminiSocket.readyState !== WebSocket.OPEN) return;
+  pauseGeminiAudioInput("toolCall");
   const functionResponses = [];
   for (const call of calls) {
     functionResponses.push(await executeFunctionCall(call));
@@ -1123,6 +1142,8 @@ function handleGeminiClose(event) {
   const message = `Gemini cerro la sesion (${code}${reason}${lastSend})`;
   state.geminiReady = false;
   state.geminiSocket = null;
+  state.geminiAudioInputPaused = true;
+  state.geminiAudioStreamOpen = false;
   stopMicCapture();
   clearActionPanel();
   setGeminiStatus(state.closingManually ? "sesion cerrada" : message, state.closingManually ? "idle" : "error");
@@ -1137,6 +1158,7 @@ async function handleGeminiMessage(rawEvent) {
 
   if (message.setupComplete) {
     state.geminiReady = true;
+    resumeGeminiAudioInput();
     if (state.geminiSocket?.__setupResolve) {
       state.geminiSocket.__setupResolve();
       state.geminiSocket.__setupResolve = null;
@@ -1156,6 +1178,9 @@ async function handleGeminiMessage(rawEvent) {
   if (content) {
     if (content.interrupted) {
       sendLiveAvatarCommand({ type: "agent.interrupt" });
+    }
+    if (content.modelTurn || content.outputTranscription || content.generationComplete) {
+      pauseGeminiAudioInput("modelTurn");
     }
     const inputTranscript = content.inputTranscription || content.input_transcription;
     if (inputTranscript?.text) {
@@ -1186,6 +1211,7 @@ async function handleGeminiMessage(rawEvent) {
     if (content.turnComplete && state.geminiReady) {
       endLiveAvatarTurn();
       state.responseTranscript = "";
+      resumeGeminiAudioInput();
       setGeminiStatus(state.muted ? "microfono muteado" : "escuchando", "ready");
       setStatus(state.muted ? "Microfono muteado" : "Escuchando", "ready");
     }
@@ -1208,6 +1234,8 @@ async function startSession() {
   state.responseTranscript = "";
   state.lastUserText = "";
   state.lastGeminiSend = "none";
+  state.geminiAudioInputPaused = true;
+  state.geminiAudioStreamOpen = false;
   state.geminiToolsEnabled = ENABLE_GEMINI_TOOLS;
   resetBankingFlow();
   clearActionPanel();
@@ -1270,6 +1298,8 @@ async function startSession() {
 
 async function stopSession(options = {}) {
   state.geminiReady = false;
+  state.geminiAudioInputPaused = true;
+  state.geminiAudioStreamOpen = false;
   state.responseTranscript = "";
   state.lastUserText = "";
   clearActionPanel();
@@ -1405,7 +1435,13 @@ function stopMicCapture() {
 function updateMicStatus() {
   if (!state.micStream) return;
   const percent = Math.round(state.micLastLevel * 100);
-  const mode = state.muted ? "muteado" : state.geminiReady ? "enviando" : "capturando";
+  const mode = state.muted
+    ? "muteado"
+    : state.geminiReady && state.geminiAudioInputPaused
+      ? "pausado por respuesta"
+      : state.geminiReady
+        ? "enviando"
+        : "capturando";
   const contextState = state.micContext?.state === "suspended" ? " (audio suspendido)" : "";
   setMicStatus(`${mode} ${percent}% (captura ${state.micFramesCaptured}, envio ${state.micFramesSent})${contextState}`, state.geminiReady ? "ready" : "idle");
 }
@@ -1420,7 +1456,13 @@ function resumeMicContext() {
 function sendAudioFrame(inputData, inputRate) {
   state.micLastLevel = getAudioLevel(inputData);
   state.micFramesCaptured += 1;
-  if (!state.geminiReady || !state.geminiSocket || state.geminiSocket.readyState !== WebSocket.OPEN || state.muted) {
+  if (
+    !state.geminiReady
+    || state.geminiAudioInputPaused
+    || !state.geminiSocket
+    || state.geminiSocket.readyState !== WebSocket.OPEN
+    || state.muted
+  ) {
     state.micRemainder = new Float32Array(0);
     return;
   }
@@ -1447,6 +1489,7 @@ function sendAudioFrame(inputData, inputRate) {
       },
     },
   }, "realtimeInput.audio");
+  state.geminiAudioStreamOpen = true;
   state.micFramesSent += 1;
 }
 
