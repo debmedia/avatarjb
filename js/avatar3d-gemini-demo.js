@@ -79,6 +79,7 @@ const state = {
   micStatusTimer: 0,
   responseTranscript: "",
   lastUserText: "",
+  lastGeminiSend: "none",
   actionPayload: null,
   bankingFlow: {
     accountType: "",
@@ -1014,15 +1015,28 @@ function geminiEndpoint() {
   return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(key)}`;
 }
 
+function sendGeminiMessage(payload, label) {
+  if (!state.geminiSocket || state.geminiSocket.readyState !== WebSocket.OPEN) return false;
+  state.lastGeminiSend = label;
+  state.geminiSocket.send(JSON.stringify(payload));
+  return true;
+}
+
 function sendClientText(text) {
   const value = String(text || "").trim();
-  if (!value || !state.geminiSocket || state.geminiSocket.readyState !== WebSocket.OPEN) return;
+  if (!value) return;
   state.lastUserText = value;
-  state.geminiSocket.send(JSON.stringify({
-    realtimeInput: {
-      text: value,
+  sendGeminiMessage({
+    clientContent: {
+      turns: [
+        {
+          role: "user",
+          parts: [{ text: value }],
+        },
+      ],
+      turnComplete: true,
     },
-  }));
+  }, "clientContent.text");
 }
 
 function functionCallsFromToolCall(toolCall) {
@@ -1097,15 +1111,16 @@ async function handleToolCall(toolCall) {
   for (const call of calls) {
     functionResponses.push(await executeFunctionCall(call));
   }
-  state.geminiSocket.send(JSON.stringify({
+  sendGeminiMessage({
     toolResponse: { functionResponses },
-  }));
+  }, "toolResponse");
 }
 
 function handleGeminiClose(event) {
   const code = event?.code ? `codigo ${event.code}` : "sin codigo";
   const reason = event?.reason ? `: ${event.reason}` : "";
-  const message = `Gemini cerro la sesion (${code}${reason})`;
+  const lastSend = state.lastGeminiSend ? ` ultimo envio: ${state.lastGeminiSend}` : "";
+  const message = `Gemini cerro la sesion (${code}${reason}${lastSend})`;
   state.geminiReady = false;
   state.geminiSocket = null;
   stopMicCapture();
@@ -1192,6 +1207,7 @@ async function startSession() {
   state.closingManually = false;
   state.responseTranscript = "";
   state.lastUserText = "";
+  state.lastGeminiSend = "none";
   state.geminiToolsEnabled = ENABLE_GEMINI_TOOLS;
   resetBankingFlow();
   clearActionPanel();
@@ -1237,7 +1253,7 @@ async function startSession() {
       socket.__setupReject = reject;
     });
 
-    socket.send(JSON.stringify(buildGeminiSetup()));
+    sendGeminiMessage(buildGeminiSetup(), "setup");
     await setupReady;
     setStatus("Escuchando", "ready");
     setGeminiStatus("escuchando", "ready");
@@ -1423,14 +1439,14 @@ function sendAudioFrame(inputData, inputRate) {
   state.micRemainder = merged.subarray(usableLength);
   const downsampled = downsampleTo16k(usable, inputRate);
   const pcm16 = floatToPcm16(downsampled);
-  state.geminiSocket.send(JSON.stringify({
+  sendGeminiMessage({
     realtimeInput: {
       audio: {
         data: bytesToBase64(pcm16),
         mimeType: "audio/pcm;rate=16000",
       },
     },
-  }));
+  }, "realtimeInput.audio");
   state.micFramesSent += 1;
 }
 
