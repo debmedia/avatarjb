@@ -26,9 +26,13 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import websockets
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ENV_FILE = ROOT / ".env.liveavatar"
 
 
 @dataclass
@@ -39,10 +43,25 @@ class BridgeState:
     turns: int = 0
 
 
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def env_summary() -> dict[str, bool]:
     return {
         "LIVEAVATAR_API_KEY": bool(os.getenv("LIVEAVATAR_API_KEY")),
         "LIVEAVATAR_AVATAR_ID": bool(os.getenv("LIVEAVATAR_AVATAR_ID")),
+        "LIVEAVATAR_IS_SANDBOX": bool(os.getenv("LIVEAVATAR_IS_SANDBOX")),
         "LIVEAVATAR_SESSION_PAYLOAD_JSON": bool(os.getenv("LIVEAVATAR_SESSION_PAYLOAD_JSON")),
     }
 
@@ -97,10 +116,13 @@ async def main() -> None:
     parser = argparse.ArgumentParser(description="Gemini audio to LiveAvatar LITE bridge skeleton")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
+    parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE))
     args = parser.parse_args()
+    load_env_file(Path(args.env_file))
 
     async with websockets.serve(handle_client, args.host, args.port):
         print(f"LiveAvatar bridge listening on ws://{args.host}:{args.port}/liveavatar")
+        print(f"LiveAvatar env loaded: {env_summary()}")
         await asyncio.Future()
 
 

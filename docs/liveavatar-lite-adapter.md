@@ -33,6 +33,38 @@ python scripts/liveavatar_bridge.py --host 127.0.0.1 --port 8788
 The bridge currently validates the browser protocol and counts audio chunks. The provider-specific
 LiveAvatar session creation and WebRTC handoff are the next piece.
 
+## Local configuration
+
+Copy the example env file and fill it with your LiveAvatar values:
+
+```powershell
+Copy-Item .env.liveavatar.example .env.liveavatar
+notepad .env.liveavatar
+```
+
+`.env.liveavatar` is ignored by Git. The bridge also accepts regular environment variables if you
+prefer setting them in the current shell:
+
+```powershell
+$env:LIVEAVATAR_API_KEY="la_..."
+$env:LIVEAVATAR_AVATAR_ID="00000000-0000-0000-0000-000000000000"
+$env:LIVEAVATAR_IS_SANDBOX="true"
+```
+
+To list your account avatars:
+
+```powershell
+$headers = @{ "X-API-KEY" = $env:LIVEAVATAR_API_KEY }
+Invoke-RestMethod -Headers $headers -Uri "https://api.liveavatar.com/v1/avatars"
+```
+
+To list public avatars:
+
+```powershell
+$headers = @{ "X-API-KEY" = $env:LIVEAVATAR_API_KEY }
+Invoke-RestMethod -Headers $headers -Uri "https://api.liveavatar.com/v1/avatars/public"
+```
+
 ## Bridge protocol
 
 Browser to bridge:

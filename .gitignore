@@ -7,6 +7,7 @@ __pycache__/
 logs/
 avatar-a2f-metrics-*.json
 vendor/
+.env.liveavatar
 
 # Heavy local avatar source/build artifacts.
 # Keep these outside regular Git; use external storage or Git LFS explicitly if needed.
