@@ -637,10 +637,23 @@ function rejectLiveAvatarWaiters(error) {
 }
 
 function handleProviderEvent(event = {}) {
+  if (event.type === "error") {
+    const message = event.error?.message || event.message || "error LiveAvatar audio";
+    setBridgeStatus(`audio directo error: ${message}`, "error");
+    return;
+  }
   if (event.type === "session.state_updated") {
     state.liveAvatarCommandReady = event.state === "connected" || state.liveAvatarCommandReady;
     if (state.liveAvatarCommandReady) flushLiveAvatarCommandQueue();
     setBridgeStatus(`estado ${event.state || "desconocido"}`, event.state === "connected" ? "ready" : "idle");
+    return;
+  }
+  if (event.type === "agent.audio_buffer_appended") {
+    setBridgeStatus(`audio recibido (${state.liveAvatarAudioChunksSent} chunks)`, "ready");
+    return;
+  }
+  if (event.type === "agent.audio_buffer_committed") {
+    setBridgeStatus("audio confirmado", "ready");
     return;
   }
   if (event.type === "agent.speak_started") {
@@ -879,12 +892,11 @@ function waitForLiveAvatarSession(timeoutMs = 30000) {
   });
 }
 
-function sendToLiveAvatar(base64, mimeType) {
+function sendToLiveAvatar(base64) {
   const ok = sendLiveAvatarCommand({
     type: "agent.speak",
     event_id: `turn-${state.liveAvatarTurn + 1}`,
     audio: base64,
-    mimeType,
   });
   if (!ok) {
     setBridgeStatus("audio Gemini recibido pero LiveAvatar WS no esta listo", "error");
@@ -1149,7 +1161,7 @@ async function handleGeminiMessage(rawEvent) {
     parts.forEach((part) => {
       const inlineData = part.inlineData || part.inline_data;
       if (!leakedToolSpeech && inlineData?.data) {
-        sendToLiveAvatar(inlineData.data, inlineData.mimeType || inlineData.mime_type || "audio/pcm;rate=24000");
+        sendToLiveAvatar(inlineData.data);
       }
     });
     if (outputTranscript?.text && !leakedToolSpeech) {
