@@ -16,9 +16,9 @@ const ENABLE_GEMINI_TOOLS = PARAMS.get("tools") !== "0" && PARAMS.get("useTools"
 const SHOW_ACTION_BUTTONS = PARAMS.get("showButtons") !== "0";
 const AUTO_START_LIVEAVATAR = ["1", "true"].includes(String(PARAMS.get("autoLiveAvatar") || "").toLowerCase());
 const GEMINI_AUTH_MODE = PARAMS.get("geminiAuth") || "ephemeral";
-const MIC_VOICE_LEVEL_THRESHOLD = 0.035;
-const MIC_START_VOICE_FRAMES = 2;
-const MIC_TAIL_SILENCE_FRAMES = 8;
+const MIC_VOICE_LEVEL_THRESHOLD = Number(PARAMS.get("micThreshold") || "0.006");
+const MIC_START_VOICE_FRAMES = Number(PARAMS.get("micStartFrames") || "1");
+const MIC_TAIL_SILENCE_FRAMES = Number(PARAMS.get("micTailFrames") || "12");
 
 const elements = {
   liveAvatarStage: document.getElementById("liveAvatarStage"),
@@ -1451,7 +1451,8 @@ function updateMicStatus() {
         ? "enviando"
         : "capturando";
   const contextState = state.micContext?.state === "suspended" ? " (audio suspendido)" : "";
-  setMicStatus(`${mode} ${percent}% (captura ${state.micFramesCaptured}, envio ${state.micFramesSent})${contextState}`, state.geminiReady ? "ready" : "idle");
+  const thresholdPercent = Math.round(MIC_VOICE_LEVEL_THRESHOLD * 100);
+  setMicStatus(`${mode} ${percent}% / umbral ${thresholdPercent}% (captura ${state.micFramesCaptured}, envio ${state.micFramesSent})${contextState}`, state.geminiReady ? "ready" : "idle");
 }
 
 function resumeMicContext() {
