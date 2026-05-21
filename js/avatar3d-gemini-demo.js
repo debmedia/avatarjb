@@ -1026,12 +1026,8 @@ function sendGeminiMessage(payload, label) {
 
 function pauseGeminiAudioInput(reason = "pause") {
   state.geminiAudioInputPaused = true;
-  if (!state.geminiAudioStreamOpen || !state.geminiReady) return;
-  sendGeminiMessage({
-    realtimeInput: {
-      audioStreamEnd: true,
-    },
-  }, `realtimeInput.audioStreamEnd:${reason}`);
+  // Do not send realtimeInput.audioStreamEnd here. In the browser Live API
+  // constrained session it can close with 1008 when sent during model output.
   state.geminiAudioStreamOpen = false;
 }
 
