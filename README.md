@@ -95,6 +95,130 @@ For the free TalkingHead prototype, the widget imports `met4citizen/TalkingHead`
 and drives the avatar mouth from Gemini audio energy. This is a lightweight approximation, not
 phoneme-level lip-sync, because Gemini Live audio chunks do not include visemes.
 
+## Character Creator FBX avatar
+
+This repo also includes a local Character Creator source avatar:
+
+- `avatar1_0.Fbx`
+- `avatar1_0.json`
+
+Use Blender to convert it to GLB and preserve facial morph targets:
+
+```bash
+blender --background --python scripts/convert-fbx-to-glb.py -- \
+  --fbx avatar1_0.Fbx \
+  --out public/avatar1_0.glb \
+  --report public/avatar1_0.morph-report.json
+```
+
+Then open `tools/glb-morph-inspector.html` and load `public/avatar1_0.glb` to inspect the exact
+`morphTargetDictionary` names for lip sync / Audio2Face mapping.
+
+For a lighter browser test build, export only upper body:
+
+```bash
+blender --background --python scripts/convert-fbx-to-glb.py -- \
+  --fbx avatar1_0.Fbx \
+  --out public/avatar1_0_upper.glb \
+  --report public/avatar1_0_upper.morph-report.json \
+  --upper-body
+```
+
+Full notes: `docs/character-creator-fbx-to-glb.md`.
+
+For a close facial-animation inspection build, export only the head:
+
+```bash
+blender --background --python scripts/convert-fbx-to-glb.py -- \
+  --fbx avatar1_0.Fbx \
+  --out public/avatar1_0_head.glb \
+  --report public/avatar1_0_head.morph-report.json \
+  --head-only
+```
+
+For the browser performance test, export only the face mesh and keep only the morphs currently
+mapped from Audio2Face:
+
+```bash
+blender --background --python scripts/convert-fbx-to-glb.py -- \
+  --fbx avatar1_0.Fbx \
+  --out public/avatar1_0_face_a2f.glb \
+  --report public/avatar1_0_face_a2f.morph-report.json \
+  --face-only \
+  --cut-ratio 0.5 \
+  --a2f-morphs-only
+```
+
+### Standalone 3D Gemini voice demo
+
+This branch includes a local prototype that does not call Journey Builder:
+
+- `avatar3d-gemini-demo.html`
+- `css/avatar3d-demo.css`
+- `js/avatar3d-gemini-demo.js`
+
+Run a static server from this folder and open:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html
+```
+
+The page asks for a Gemini API key locally, connects to Gemini Live, plays Gemini audio and drives
+the Character Creator avatar with local, OVR-style or Audio2Face blendshape data.
+
+The standalone demo loads the optimized face-only Audio2Face GLB by default. To compare with the
+full head or bust versions:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?avatar=head
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?avatar=upper
+```
+
+You can lower the render cap while testing audio smoothness:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?fps=20
+```
+
+Optional local Oculus-style lip sync bridge:
+
+```bash
+python3 scripts/ovr_lipsync_server.py --host 127.0.0.1 --port 8765
+```
+
+The demo will connect to `ws://127.0.0.1:8765` and send Gemini PCM audio chunks to receive
+15 Oculus/OVR-style viseme weights. If `OVR_LIPSYNC_LIB=/path/to/libOVRLipSync.so` is set, the
+server attempts to load a native OVR LipSync library; otherwise it runs a lightweight
+protocol-compatible fallback so the browser wiring can be tested without the SDK binary.
+
+The secondary text model used for semantic facial gestures defaults to `gemini-2.5-flash-lite`.
+You can override it in local tests:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?gestureModel=gemini-2.5-flash
+```
+
+If that model returns 429/5xx, the page backs off for 60 seconds and uses local gesture fallback.
+
+Optional Audio2Face-3D bridge:
+
+```bash
+python3 scripts/audio2face_bridge.py \
+  --host 127.0.0.1 \
+  --port 8766 \
+  --target 44.223.28.18:52000
+```
+
+The demo connects to `ws://127.0.0.1:8766` by default and forwards Gemini PCM chunks to the
+Audio2Face-3D NIM gRPC endpoint. You can override the local bridge URL:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?audio2FaceUrl=ws://127.0.0.1:8766
+```
+
+Audio2Face blendshapes have priority over the older OVR-style/local lip-sync fallback when fresh
+frames are available.
+
 ## Embed examples
 
 ### Option A (recommended): script + tag attributes

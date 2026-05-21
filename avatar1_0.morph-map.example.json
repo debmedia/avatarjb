@@ -1,0 +1,26 @@
+{
+  "notes": [
+    "Este archivo es un punto de partida. Los nombres reales salen de public/avatar1_0.morph-report.json despues de exportar desde Blender.",
+    "Audio2Face suele emitir canales estilo ARKit. Character Creator puede exportar shape keys con nombres distintos; mapear siempre contra morphTargetDictionary real.",
+    "La frase/visema exacta depende del motor de lip sync. Para energia de audio simple, usar jawOpen/mouthOpen como fallback."
+  ],
+  "audio2FaceToCharacterCreator": {
+    "jawOpen": ["Jaw_Open", "Mouth_Open", "V_Open", "jawOpen", "mouthOpen", "viseme_aa"],
+    "eyeBlinkLeft": ["Eye_Blink_L", "Blink_L", "eyeBlinkLeft"],
+    "eyeBlinkRight": ["Eye_Blink_R", "Blink_R", "eyeBlinkRight"],
+    "mouthSmileLeft": ["Mouth_Smile_L", "Smile_L", "mouthSmileLeft"],
+    "mouthSmileRight": ["Mouth_Smile_R", "Smile_R", "mouthSmileRight"],
+    "mouthFunnel": ["Mouth_Funnel", "V_Tunnel", "mouthFunnel"],
+    "mouthPucker": ["Mouth_Pucker", "V_Tight", "mouthPucker"],
+    "mouthClose": ["Mouth_Close", "V_None", "mouthClose"],
+    "tongueOut": ["Tongue_Out", "tongueOut"]
+  },
+  "visemeFallbacks": {
+    "aa": ["V_Open", "Jaw_Open", "Mouth_Open", "viseme_aa"],
+    "ee": ["V_Wide", "Mouth_Smile_L", "Mouth_Smile_R", "viseme_E"],
+    "oh": ["V_Tunnel", "Mouth_Funnel", "Mouth_Pucker", "viseme_O"],
+    "f": ["V_Dental_Lip", "Mouth_Lower_Down_L", "Mouth_Lower_Down_R", "viseme_FF"],
+    "m": ["V_None", "Mouth_Close", "viseme_PP"],
+    "sil": ["V_None", "Mouth_Close", "viseme_sil"]
+  }
+}

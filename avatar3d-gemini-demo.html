@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avatar 3D Gemini Demo</title>
+  <link rel="stylesheet" href="./css/avatar3d-demo.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="./js/avatar3d-gemini-demo.js"></script>
+</head>
+<body>
+  <main class="demo-shell">
+    <section class="stage" aria-label="Avatar 3D">
+      <div id="avatarStage" class="stage-canvas"></div>
+      <div class="status-pill">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText">Cargando avatar</span>
+      </div>
+      <section id="actionPanel" class="action-panel" aria-live="polite" hidden></section>
+    </section>
+
+    <aside class="panel" aria-label="Controles">
+      <div>
+        <h1>Avatar 3D Gemini</h1>
+        <p>Prueba local sin Journey Builder. La key queda solo en este navegador.</p>
+      </div>
+
+      <div class="panel-main">
+        <div class="config-column">
+
+      <label>
+        Avatar
+        <select id="avatarSelect">
+          <option value="clothed">Avatar + ropa balance</option>
+          <option value="faceFullMorphs">Avatar + pelo balance</option>
+          <option value="face">Cara A2F rapida</option>
+          <option value="upper">Torso + pelo pesado</option>
+          <option value="full">Cuerpo completo muy pesado</option>
+        </select>
+      </label>
+
+      <label>
+        Calidad render
+        <select id="renderQualitySelect">
+          <option value="performance">Rendimiento</option>
+          <option value="balanced">Balance</option>
+          <option value="high">Alta</option>
+        </select>
+      </label>
+
+      <label>
+        Microfono
+        <select id="micSelect">
+          <option value="">Predeterminado del sistema</option>
+        </select>
+      </label>
+
+      <label>
+        Gemini API key
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="AIza...">
+      </label>
+
+      <label>
+        Voz
+        <select id="voiceSelect">
+          <option value="Charon">Charon</option>
+          <option value="Puck">Puck</option>
+          <option value="Kore">Kore</option>
+          <option value="Fenrir">Fenrir</option>
+          <option value="Aoede">Aoede</option>
+          <option value="Leda">Leda</option>
+          <option value="Orus">Orus</option>
+          <option value="Zephyr">Zephyr</option>
+        </select>
+      </label>
+
+      <label>
+        Prompt
+        <textarea id="promptInput" rows="13">Eres un ejecutivo bancario virtual de Santiago de Chile. Habla en espanol chileno santiaguino, cordial, cercano y tranquilo, con ritmo pausado pero natural. Suena como alguien atendiendo en una sucursal chilena: usa expresiones como "mira", "claro", "perfecto", "super", "te cuento", "cuentame", "si te parece", "revisemos", "de todas maneras", "altiro" y "un momentito por favor". Puedes usar "po" muy ocasionalmente, solo si suena natural. Evita sonar argentino o neutro internacional: no uses "vos", "tenes", "queres", "dale", "aguarda", "vale" ni "de acuerdo" como muletilla principal. No exageres los modismos.
+
+Vas a simular con el usuario la creacion de una cuenta bancaria. Guia el proceso paso a paso: tipo de cuenta, requisitos generales, datos personales ficticios de prueba y confirmacion final. No pidas claves, PIN, contrasenas, codigos SMS, numeros reales de tarjetas ni datos bancarios reales. Si necesitas datos sensibles, pide datos ficticios.
+
+Regla critica de flujo: cuando necesites avanzar la simulacion o mostrar opciones, llama silenciosamente la herramienta consultar_flujo_bancario. No inventes botones por tu cuenta. La herramienta devolvera respuesta, form y buttons; tu voz debe decir solo la respuesta en forma natural. NO digas por voz el nombre de la herramienta, NO leas JSON, NO digas "form", "buttons", "label", "value", "tool" ni "function call".</textarea>
+      </label>
+
+      <div class="expressiveness-controls" aria-label="Ajustes de expresividad facial">
+        <label>
+          <span>Boca <output id="mouthGainValue">1.35x</output></span>
+          <input id="mouthGainInput" type="range" min="0.5" max="2.5" step="0.05" value="1.35">
+        </label>
+        <label>
+          <span>Cara baja <output id="lowerFaceGainValue">1.45x</output></span>
+          <input id="lowerFaceGainInput" type="range" min="0.5" max="2.5" step="0.05" value="1.45">
+        </label>
+        <label>
+          <span>Respuesta A2F <output id="a2fSmoothingValue">0.44</output></span>
+          <input id="a2fSmoothingInput" type="range" min="0.15" max="0.8" step="0.01" value="0.44">
+        </label>
+        <label>
+          <span>Cabeza <output id="headMotionGainValue">0.75x</output></span>
+          <input id="headMotionGainInput" type="range" min="0" max="1.5" step="0.05" value="0.75">
+        </label>
+      </div>
+
+      <button id="pauseAvatarButton" class="pause-avatar-button" type="button">Pausar avatar</button>
+      <button id="micA2FButton" class="pause-avatar-button" type="button">Microfono -> avatar</button>
+
+      <div class="actions">
+        <button id="startButton" type="button">Iniciar</button>
+        <button id="muteButton" type="button" disabled>Mutear</button>
+        <button id="stopButton" type="button" disabled>Detener</button>
+      </div>
+
+        </div>
+        <div class="monitor-column">
+
+      <div id="gestureStatus" class="gesture-status">Gestos: esperando audio</div>
+      <div id="fallbackBadge" class="fallback-badge">Lip-sync: esperando</div>
+      <div id="metricsStatus" class="metrics-status">A2F: esperando metricas</div>
+      <div class="metrics-monitor" aria-label="Monitor de metricas Audio2Face">
+        <div class="metric-chart">
+          <div class="metric-chart-head">
+            <span>FPS</span>
+            <span>A2F / out / avatar / fallback</span>
+          </div>
+          <canvas id="fpsChartCanvas" width="320" height="92"></canvas>
+        </div>
+        <div class="metric-chart">
+          <div class="metric-chart-head">
+            <span>Latencia</span>
+            <span>stale / gap</span>
+          </div>
+          <canvas id="latencyChartCanvas" width="320" height="92"></canvas>
+        </div>
+        <div class="metric-chart">
+          <div class="metric-chart-head">
+            <span>Expresion</span>
+            <span>energia / max</span>
+          </div>
+          <canvas id="blendChartCanvas" width="320" height="92"></canvas>
+        </div>
+      </div>
+      <div class="metrics-actions">
+        <button id="downloadMetricsCsvButton" type="button" disabled>Exportar CSV</button>
+        <button id="downloadMetricsJsonButton" type="button" disabled>JSON</button>
+        <button id="clearMetricsButton" type="button" disabled>Limpiar</button>
+      </div>
+
+        </div>
+      </div>
+
+    </aside>
+  </main>
+</body>
+</html>

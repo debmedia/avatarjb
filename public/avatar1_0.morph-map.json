@@ -1,0 +1,51 @@
+{
+  "primaryMesh": "CC_Base_Body",
+  "lipSync": {
+    "silence": "V_None",
+    "mouthOpen": "V_Open",
+    "explosive": "V_Explosive",
+    "dentalLip": "V_Dental_Lip",
+    "tightO": "V_Tight_O",
+    "tight": "V_Tight",
+    "wide": "V_Wide",
+    "affricate": "V_Affricate",
+    "lipOpen": "V_Lip_Open",
+    "tongueUp": "V_Tongue_up",
+    "tongueRaise": "V_Tongue_Raise",
+    "tongueOut": "V_Tongue_Out"
+  },
+  "audio2FaceLike": {
+    "jawOpen": "V_Open",
+    "eyeBlinkLeft": "Eye_Blink_L",
+    "eyeBlinkRight": "Eye_Blink_R",
+    "mouthSmileLeft": "Mouth_Corner_Pull_L",
+    "mouthSmileRight": "Mouth_Corner_Pull_R",
+    "mouthFunnel": "Mouth_Funnel_UL",
+    "mouthPucker": "Mouth_Lips_Purse_UL",
+    "mouthClose": "V_None",
+    "tongueOut": "V_Tongue_Out"
+  },
+  "visemes": {
+    "aa": "V_Open",
+    "ee": "V_Wide",
+    "oh": "V_Tight_O",
+    "ff": "V_Dental_Lip",
+    "pp": "V_Explosive",
+    "ch": "V_Affricate",
+    "sil": "V_None"
+  },
+  "expressions": {
+    "blinkLeft": "Eye_Blink_L",
+    "blinkRight": "Eye_Blink_R",
+    "browDownLeft": "Brow_Down_L",
+    "browDownRight": "Brow_Down_R",
+    "browRaiseOuterLeft": "Brow_Raise_Outer_L",
+    "browRaiseOuterRight": "Brow_Raise_Outer_R",
+    "eyeWideLeft": "Eye_Widen_L",
+    "eyeWideRight": "Eye_Widen_R",
+    "smileLeft": "Mouth_Corner_Pull_L",
+    "smileRight": "Mouth_Corner_Pull_R",
+    "mouthLeft": "Mouth_Left",
+    "mouthRight": "Mouth_Right"
+  }
+}

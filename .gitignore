@@ -1,0 +1,16 @@
+# Local Python/runtime artifacts
+__pycache__/
+*.py[cod]
+.venv*/
+
+# Local demo logs and exported diagnostics
+logs/
+avatar-a2f-metrics-*.json
+
+# Heavy local avatar source/build artifacts.
+# Keep these outside regular Git; use external storage or Git LFS explicitly if needed.
+*.fbx
+*.Fbx
+avatar1_0.json
+public/*.glb
+public/*.morph-report.json
