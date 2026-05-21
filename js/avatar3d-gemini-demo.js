@@ -651,9 +651,14 @@ function handleProviderEvent(event = {}) {
 }
 
 function handleLiveAvatarBridgeMessage(message = {}) {
-  if (message.config?.geminiApiKey && !elements.apiKeyInput.value.trim()) {
-    elements.apiKeyInput.value = message.config.geminiApiKey;
-    setLiveAvatarPickerStatus("Gemini key cargada desde .env");
+  if (message.config?.geminiApiKey) {
+    const envKey = String(message.config.geminiApiKey).trim();
+    const currentKey = elements.apiKeyInput.value.trim();
+    if (envKey && currentKey !== envKey) {
+      elements.apiKeyInput.value = envKey;
+      localStorage.setItem(STORAGE_KEY, envKey);
+      setLiveAvatarPickerStatus(currentKey ? "Gemini key actualizada desde .env" : "Gemini key cargada desde .env");
+    }
   }
   if (message.config?.liveAvatarId && !state.liveAvatarId) {
     selectLiveAvatar(message.config.liveAvatarId, { notifyBridge: false });
