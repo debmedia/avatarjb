@@ -14,7 +14,7 @@ const DEFAULT_LIVEAVATAR_ID = PARAMS.get("liveAvatarId") || localStorage.getItem
 const BANKING_TOOL_NAME = "consultar_flujo_bancario";
 const ENABLE_GEMINI_TOOLS = PARAMS.get("tools") !== "0" && PARAMS.get("useTools") !== "0";
 const SHOW_ACTION_BUTTONS = PARAMS.get("showButtons") !== "0";
-const AUTO_START_LIVEAVATAR = PARAMS.get("autoLiveAvatar") !== "0";
+const AUTO_START_LIVEAVATAR = ["1", "true"].includes(String(PARAMS.get("autoLiveAvatar") || "").toLowerCase());
 
 const elements = {
   liveAvatarStage: document.getElementById("liveAvatarStage"),
@@ -1472,7 +1472,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 restoreSettings();
-setStatus("Conectando LiveAvatar");
+setStatus("Listo para iniciar");
 setButtons();
 connectLiveAvatarBridge();
 refreshMicDevices().catch(() => {});

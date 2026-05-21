@@ -332,7 +332,7 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
             "liveAvatarId": os.getenv("LIVEAVATAR_AVATAR_ID", ""),
             "sandbox": truthy_env("LIVEAVATAR_IS_SANDBOX", True),
             "sandboxAvatarId": sandbox_avatar_id(),
-            "autoStart": truthy_env("LIVEAVATAR_AUTO_START", True),
+            "autoStart": truthy_env("LIVEAVATAR_AUTO_START", False),
         },
     })
 

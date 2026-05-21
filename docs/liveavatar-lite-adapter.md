@@ -62,10 +62,12 @@ LIVEAVATAR_API_BASE=https://api.liveavatar.com
 LIVEAVATAR_AVATAR_ID=
 LIVEAVATAR_IS_SANDBOX=true
 LIVEAVATAR_SANDBOX_AVATAR_ID=65f9e3c9-d48b-4118-b73a-4ae2e3cbb8f0
-LIVEAVATAR_AUTO_START=true
+LIVEAVATAR_AUTO_START=false
 LIVEAVATAR_VIDEO_QUALITY=medium
 LIVEAVATAR_VIDEO_ENCODING=VP8
 ```
+
+By default the page lists avatars and loads keys, but does not create a LiveAvatar session until the user presses **Iniciar** or **Conectar avatar**. To opt into old autostart behavior for debugging, use `?autoLiveAvatar=1` and set `LIVEAVATAR_AUTO_START=true`.
 
 ## Bridge protocol
 
