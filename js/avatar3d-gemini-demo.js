@@ -16,6 +16,9 @@ const ENABLE_GEMINI_TOOLS = PARAMS.get("tools") !== "0" && PARAMS.get("useTools"
 const SHOW_ACTION_BUTTONS = PARAMS.get("showButtons") !== "0";
 const AUTO_START_LIVEAVATAR = ["1", "true"].includes(String(PARAMS.get("autoLiveAvatar") || "").toLowerCase());
 const GEMINI_AUTH_MODE = PARAMS.get("geminiAuth") || "ephemeral";
+const MIC_VOICE_LEVEL_THRESHOLD = 0.035;
+const MIC_START_VOICE_FRAMES = 2;
+const MIC_TAIL_SILENCE_FRAMES = 8;
 
 const elements = {
   liveAvatarStage: document.getElementById("liveAvatarStage"),
@@ -78,6 +81,9 @@ const state = {
   micFramesCaptured: 0,
   micFramesSent: 0,
   micLastLevel: 0,
+  micVoiceFrames: 0,
+  micSilentFrames: 0,
+  micSpeechActive: false,
   micStatusTimer: 0,
   responseTranscript: "",
   lastUserText: "",
@@ -1029,10 +1035,12 @@ function pauseGeminiAudioInput(reason = "pause") {
   // Do not send realtimeInput.audioStreamEnd here. In the browser Live API
   // constrained session it can close with 1008 when sent during model output.
   state.geminiAudioStreamOpen = false;
+  resetMicGate();
 }
 
 function resumeGeminiAudioInput() {
   state.geminiAudioInputPaused = false;
+  resetMicGate();
 }
 
 function sendClientText(text) {
@@ -1403,6 +1411,7 @@ async function startMicCapture() {
   state.micFramesCaptured = 0;
   state.micFramesSent = 0;
   state.micLastLevel = 0;
+  resetMicGate();
   window.clearInterval(state.micStatusTimer);
   state.micStatusTimer = window.setInterval(updateMicStatus, 700);
   updateMicStatus();
@@ -1425,6 +1434,7 @@ function stopMicCapture() {
   state.micFramesCaptured = 0;
   state.micFramesSent = 0;
   state.micLastLevel = 0;
+  resetMicGate();
   setMicStatus("detenido");
 }
 
@@ -1435,6 +1445,8 @@ function updateMicStatus() {
     ? "muteado"
     : state.geminiReady && state.geminiAudioInputPaused
       ? "pausado por respuesta"
+      : state.geminiReady && !state.micSpeechActive
+        ? "esperando voz"
       : state.geminiReady
         ? "enviando"
         : "capturando";
@@ -1449,6 +1461,34 @@ function resumeMicContext() {
     .catch(() => {});
 }
 
+function resetMicGate() {
+  state.micVoiceFrames = 0;
+  state.micSilentFrames = 0;
+  state.micSpeechActive = false;
+  state.micRemainder = new Float32Array(0);
+}
+
+function shouldSendMicInput(level) {
+  const hasVoice = level >= MIC_VOICE_LEVEL_THRESHOLD;
+  if (hasVoice) {
+    state.micVoiceFrames += 1;
+    state.micSilentFrames = 0;
+    if (state.micVoiceFrames >= MIC_START_VOICE_FRAMES) {
+      state.micSpeechActive = true;
+    }
+    return state.micSpeechActive;
+  }
+
+  state.micVoiceFrames = 0;
+  if (!state.micSpeechActive) return false;
+
+  state.micSilentFrames += 1;
+  if (state.micSilentFrames <= MIC_TAIL_SILENCE_FRAMES) return true;
+
+  resetMicGate();
+  return false;
+}
+
 function sendAudioFrame(inputData, inputRate) {
   state.micLastLevel = getAudioLevel(inputData);
   state.micFramesCaptured += 1;
@@ -1459,9 +1499,15 @@ function sendAudioFrame(inputData, inputRate) {
     || state.geminiSocket.readyState !== WebSocket.OPEN
     || state.muted
   ) {
+    resetMicGate();
+    return;
+  }
+
+  if (!shouldSendMicInput(state.micLastLevel)) {
     state.micRemainder = new Float32Array(0);
     return;
   }
+  const sendLabel = state.micSilentFrames > 0 ? "realtimeInput.audio:tail" : "realtimeInput.audio:voice";
 
   const merged = new Float32Array(state.micRemainder.length + inputData.length);
   merged.set(state.micRemainder, 0);
@@ -1484,7 +1530,7 @@ function sendAudioFrame(inputData, inputRate) {
         mimeType: "audio/pcm;rate=16000",
       },
     },
-  }, "realtimeInput.audio");
+  }, sendLabel);
   state.geminiAudioStreamOpen = true;
   state.micFramesSent += 1;
 }
