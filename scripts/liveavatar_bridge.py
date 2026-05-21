@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import os
+import urllib.parse
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -25,6 +26,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = ROOT / ".env"
 LEGACY_ENV_FILE = ROOT / ".env.liveavatar"
 DEFAULT_SANDBOX_AVATAR_ID = "65f9e3c9-d48b-4118-b73a-4ae2e3cbb8f0"
+GEMINI_AUTH_TOKEN_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+GEMINI_CONSTRAINED_WS = (
+    "wss://generativelanguage.googleapis.com/ws/"
+    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained"
+)
 
 
 @dataclass
@@ -118,6 +124,41 @@ def http_json(method: str, path: str, headers: dict[str, str], payload: dict[str
         return json.loads(raw)
     except json.JSONDecodeError as error:
         raise RuntimeError(f"LiveAvatar devolvio JSON invalido: {raw[:200]}") from error
+
+
+def create_gemini_ephemeral_token_sync() -> str:
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("Falta GEMINI_API_KEY en .env")
+
+    url = f"{GEMINI_AUTH_TOKEN_URL}?key={urllib.parse.quote(api_key, safe='')}"
+    data = json.dumps({"uses": 1}).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": "avatarjb-liveavatar-bridge/0.2"},
+        data=data,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Gemini token HTTP {error.code}: {detail[:500]}") from error
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Gemini token devolvio JSON invalido: {raw[:200]}") from error
+
+    token = str(payload.get("name") or "").strip()
+    if not token:
+        raise RuntimeError("Gemini no devolvio token efimero")
+    return token
+
+
+def gemini_ephemeral_endpoint(token: str) -> str:
+    return f"{GEMINI_CONSTRAINED_WS}?access_token={urllib.parse.quote(token, safe='')}"
 
 
 def normalize_avatar(raw: dict[str, Any]) -> dict[str, Any]:
@@ -368,6 +409,20 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
                 state.avatar_id = str(message.get("avatarId") or "").strip()
                 state.avatar_scope = str(message.get("scope") or state.avatar_scope or "public")
                 await send_json(socket, {"type": "status", "message": f"avatar seleccionado {state.avatar_id or 'sin id'}"})
+                continue
+
+            if message_type == "gemini_token":
+                try:
+                    token = await asyncio.to_thread(create_gemini_ephemeral_token_sync)
+                except Exception as error:
+                    await send_json(socket, {"type": "error", "message": str(error), "source": "gemini_token"})
+                    continue
+                await send_json(socket, {
+                    "type": "gemini_token",
+                    "auth": "ephemeral",
+                    "endpoint": gemini_ephemeral_endpoint(token),
+                    "message": "Gemini token efimero listo",
+                })
                 continue
 
             if message_type == "start_session":

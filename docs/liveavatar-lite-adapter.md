@@ -2,7 +2,7 @@
 
 Goal: keep this app's current conversation stack while using LiveAvatar only as the realtime video layer:
 
-- Browser microphone -> Gemini Live
+- Browser microphone -> Gemini Live through a short-lived Gemini token
 - Gemini tool calls -> local banking UI buttons
 - Gemini response audio -> LiveAvatar command WebSocket from the browser
 - LiveAvatar LITE -> realtime photoreal video stream through LiveKit
@@ -18,17 +18,19 @@ Browser
   3. Receives livekit_url, livekit_client_token and ws_url
   4. Connects LiveKit directly for video
   5. Connects ws_url directly and sends agent.speak / agent.speak_end
-  6. Connects Gemini Live directly for conversation audio/tools
+  6. Asks bridge for a Gemini ephemeral token
+  7. Connects Gemini Live directly for conversation audio/tools
 
 Bridge
   1. Reads .env
   2. Uses LIVEAVATAR_API_KEY or HEYGEN_API_KEY
   3. Calls LiveAvatar sessions/token and sessions/start
-  4. Returns short-lived session credentials to the browser
-  5. Stops the session when requested
+  4. Calls Gemini auth_tokens with GEMINI_API_KEY
+  5. Returns short-lived session credentials to the browser
+  6. Stops the session when requested
 ```
 
-This avoids sending every Gemini audio chunk through localhost, which reduces the audio path by one WebSocket hop.
+This avoids sending every Gemini audio chunk through localhost, which reduces the audio path by one WebSocket hop. The browser no longer needs the long-lived Gemini API key for Live API; it receives a short-lived `v1alpha` Live token from the bridge.
 
 ## Run locally
 
@@ -78,6 +80,7 @@ Browser to bridge:
 {"type":"list_avatars","scope":"public"}
 {"type":"select_avatar","avatarId":"<avatar-id>","scope":"public"}
 {"type":"start_session","avatarId":"<avatar-id>","scope":"public"}
+{"type":"gemini_token"}
 {"type":"stop_session"}
 ```
 
@@ -87,6 +90,7 @@ Bridge to browser:
 {"type":"ready","message":"bridge LiveAvatar conectado","config":{"geminiApiKey":"..."}}
 {"type":"avatars","scope":"public","avatars":[{"id":"...","name":"..."}]}
 {"type":"session","audioPath":"browser_direct","url":"<livekit_url>","access_token":"<livekit_client_token>","ws_url":"<liveavatar_ws_url>"}
+{"type":"gemini_token","auth":"ephemeral","endpoint":"wss://generativelanguage.googleapis.com/ws/...BidiGenerateContentConstrained?access_token=..."}
 {"type":"status","message":"..."}
 {"type":"error","message":"..."}
 ```

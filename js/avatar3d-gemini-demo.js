@@ -15,6 +15,7 @@ const BANKING_TOOL_NAME = "consultar_flujo_bancario";
 const ENABLE_GEMINI_TOOLS = PARAMS.get("tools") !== "0" && PARAMS.get("useTools") !== "0";
 const SHOW_ACTION_BUTTONS = PARAMS.get("showButtons") !== "0";
 const AUTO_START_LIVEAVATAR = ["1", "true"].includes(String(PARAMS.get("autoLiveAvatar") || "").toLowerCase());
+const GEMINI_AUTH_MODE = PARAMS.get("geminiAuth") || "ephemeral";
 
 const elements = {
   liveAvatarStage: document.getElementById("liveAvatarStage"),
@@ -43,6 +44,7 @@ const elements = {
 const state = {
   geminiSocket: null,
   geminiReady: false,
+  geminiEndpointWaiters: [],
   starting: false,
   muted: false,
   closingManually: false,
@@ -679,6 +681,9 @@ function handleLiveAvatarBridgeMessage(message = {}) {
     return;
   }
   if (message.type === "error") {
+    if (message.source === "gemini_token") {
+      rejectGeminiEndpointWaiters(new Error(message.message || "No se pudo crear token Gemini."));
+    }
     state.liveAvatarStarting = false;
     const error = new Error(message.message || "error bridge");
     setBridgeStatus(error.message, "error");
@@ -686,6 +691,16 @@ function handleLiveAvatarBridgeMessage(message = {}) {
     setPlaceholder(error.message);
     rejectLiveAvatarWaiters(error);
     setButtons();
+    return;
+  }
+  if (message.type === "gemini_token") {
+    const endpoint = String(message.endpoint || "").trim();
+    if (!endpoint) {
+      rejectGeminiEndpointWaiters(new Error("Bridge no devolvio endpoint Gemini."));
+      return;
+    }
+    setGeminiStatus(message.message || "token efimero listo", "ready");
+    resolveGeminiEndpointWaiters({ endpoint, auth: message.auth || "ephemeral" });
     return;
   }
   if (message.type === "avatars") {
@@ -742,6 +757,7 @@ function connectLiveAvatarBridge() {
     state.bridgeReady = false;
     state.liveAvatarConnected = false;
     state.liveAvatarStarting = false;
+    rejectGeminiEndpointWaiters(new Error("Bridge local cerrado antes de entregar token Gemini."));
     setBridgeStatus("bridge cerrado");
     setButtons();
   };
@@ -751,6 +767,47 @@ function sendLiveAvatarBridgeMessage(payload = {}) {
   if (!state.bridgeSocket || state.bridgeSocket.readyState !== WebSocket.OPEN) return false;
   state.bridgeSocket.send(JSON.stringify(payload));
   return true;
+}
+
+function rejectGeminiEndpointWaiters(error) {
+  const waiters = state.geminiEndpointWaiters.splice(0);
+  waiters.forEach(({ reject, timeout }) => {
+    window.clearTimeout(timeout);
+    reject(error);
+  });
+}
+
+function resolveGeminiEndpointWaiters(endpoint) {
+  const waiters = state.geminiEndpointWaiters.splice(0);
+  waiters.forEach(({ resolve, timeout }) => {
+    window.clearTimeout(timeout);
+    resolve(endpoint);
+  });
+}
+
+function requestGeminiEndpoint(timeoutMs = 15000) {
+  if (GEMINI_AUTH_MODE === "apiKey") {
+    return Promise.resolve({
+      auth: "api-key",
+      endpoint: geminiEndpoint(),
+    });
+  }
+
+  if (!state.bridgeSocket || state.bridgeSocket.readyState !== WebSocket.OPEN) {
+    connectLiveAvatarBridge();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error("Timeout solicitando token efimero de Gemini."));
+    }, timeoutMs);
+    state.geminiEndpointWaiters.push({ resolve, reject, timeout });
+    if (!sendLiveAvatarBridgeMessage({ type: "gemini_token" })) {
+      window.clearTimeout(timeout);
+      state.geminiEndpointWaiters = state.geminiEndpointWaiters.filter((waiter) => waiter.resolve !== resolve);
+      reject(new Error("Bridge local no disponible para token Gemini."));
+    }
+  });
 }
 
 function requestLiveAvatarAvatars() {
@@ -1136,9 +1193,12 @@ async function startSession() {
     setStatus("Activando microfono");
     await startMicCapture();
 
-    setStatus(`Conectando Gemini (${DEFAULT_MODEL}${state.geminiToolsEnabled ? " + tools" : ""})`);
+    setStatus(`Solicitando token Gemini (${DEFAULT_MODEL}${state.geminiToolsEnabled ? " + tools" : ""})`);
+    setGeminiStatus(GEMINI_AUTH_MODE === "apiKey" ? "conectando con API key" : "pidiendo token efimero");
+    const geminiConnection = await requestGeminiEndpoint();
+    setStatus(`Conectando Gemini (${geminiConnection.auth || "ephemeral"})`);
     setGeminiStatus("conectando");
-    const socket = new WebSocket(geminiEndpoint());
+    const socket = new WebSocket(geminiConnection.endpoint);
     state.geminiSocket = socket;
 
     await new Promise((resolve, reject) => {
