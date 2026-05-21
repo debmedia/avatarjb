@@ -55,6 +55,15 @@ class BridgeState:
 def load_env_file(path: Path) -> None:
     if not path.exists():
         return
+    for key, value in parse_env_file(path).items():
+        if key and value and not os.environ.get(key):
+            os.environ[key] = value
+
+
+def parse_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -62,8 +71,17 @@ def load_env_file(path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and value and not os.environ.get(key):
-            os.environ[key] = value
+        if key and value:
+            values[key] = value
+    return values
+
+
+def fresh_env_value(name: str) -> str:
+    for path in (DEFAULT_ENV_FILE, LEGACY_ENV_FILE):
+        value = parse_env_file(path).get(name, "")
+        if value:
+            return value
+    return (os.getenv(name) or "").strip()
 
 
 def load_env_files(primary_path: Path) -> None:
@@ -81,7 +99,7 @@ def truthy_env(name: str, default: bool = False) -> bool:
 
 def env_summary() -> dict[str, bool]:
     return {
-        "GEMINI_API_KEY": bool(os.getenv("GEMINI_API_KEY")),
+        "GEMINI_API_KEY": bool(fresh_env_value("GEMINI_API_KEY")),
         "HEYGEN_API_KEY": bool(os.getenv("HEYGEN_API_KEY")),
         "LIVEAVATAR_API_KEY": bool(os.getenv("LIVEAVATAR_API_KEY")),
         "LIVEAVATAR_AVATAR_ID": bool(os.getenv("LIVEAVATAR_AVATAR_ID")),
@@ -127,7 +145,7 @@ def http_json(method: str, path: str, headers: dict[str, str], payload: dict[str
 
 
 def create_gemini_ephemeral_token_sync() -> str:
-    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    api_key = fresh_env_value("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("Falta GEMINI_API_KEY en .env")
 
@@ -369,7 +387,7 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
         "message": "bridge LiveAvatar conectado",
         "env": env_summary(),
         "config": {
-            "geminiApiKey": os.getenv("GEMINI_API_KEY", ""),
+            "geminiApiKey": fresh_env_value("GEMINI_API_KEY"),
             "liveAvatarId": os.getenv("LIVEAVATAR_AVATAR_ID", ""),
             "sandbox": truthy_env("LIVEAVATAR_IS_SANDBOX", True),
             "sandboxAvatarId": sandbox_avatar_id(),
