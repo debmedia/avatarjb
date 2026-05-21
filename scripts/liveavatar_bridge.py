@@ -58,7 +58,7 @@ def load_env_file(path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if key and value and not os.environ.get(key):
             os.environ[key] = value
 
 
@@ -84,7 +84,7 @@ def liveavatar_api_base() -> str:
 
 
 def liveavatar_headers() -> dict[str, str]:
-    api_key = os.getenv("LIVEAVATAR_API_KEY", "").strip()
+    api_key = (os.getenv("LIVEAVATAR_API_KEY") or os.getenv("HEYGEN_API_KEY") or "").strip()
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
@@ -134,8 +134,8 @@ def avatars_from_response(payload: Any) -> list[dict[str, Any]]:
 
 
 async def fetch_liveavatar_avatars(scope: str) -> list[dict[str, Any]]:
-    if not os.getenv("LIVEAVATAR_API_KEY"):
-        raise RuntimeError("Falta LIVEAVATAR_API_KEY en .env")
+    if not (os.getenv("LIVEAVATAR_API_KEY") or os.getenv("HEYGEN_API_KEY")):
+        raise RuntimeError("Falta LIVEAVATAR_API_KEY o HEYGEN_API_KEY en .env")
     path = "/v1/avatars/public" if scope == "public" else "/v1/avatars"
     url = f"{liveavatar_api_base()}{path}"
 
@@ -162,6 +162,10 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
         "type": "ready",
         "message": "bridge local conectado; falta configurar LiveAvatar provider",
         "env": env_summary(),
+        "config": {
+            "geminiApiKey": os.getenv("GEMINI_API_KEY", ""),
+            "liveAvatarId": os.getenv("LIVEAVATAR_AVATAR_ID", ""),
+        },
     })
 
     async for raw_message in socket:

@@ -3601,6 +3601,13 @@ async function connectLiveAvatarRoom(payload = {}) {
 }
 
 function handleLiveAvatarBridgeMessage(message = {}) {
+  if (message.config?.geminiApiKey && elements.apiKeyInput && !elements.apiKeyInput.value.trim()) {
+    elements.apiKeyInput.value = message.config.geminiApiKey;
+    setLiveAvatarPickerStatus("Gemini key cargada desde .env");
+  }
+  if (message.config?.liveAvatarId && !state.liveAvatarId) {
+    selectLiveAvatar(message.config.liveAvatarId, { persist: true, notifyBridge: false });
+  }
   if (message.type === "ready") {
     state.liveAvatarReady = true;
     setLiveAvatarStatus(message.message || "bridge listo", "ready");
