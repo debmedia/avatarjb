@@ -65,8 +65,16 @@ const STORAGE_KEY = "avatar3d_gemini_api_key";
 const EXPRESSIVENESS_STORAGE_KEY = "avatar3d_expressiveness";
 const AVATAR_STORAGE_KEY = "avatar3d_avatar_preset";
 const RENDER_QUALITY_STORAGE_KEY = "avatar3d_render_quality";
+const AVATAR_MODE_STORAGE_KEY = "avatar3d_avatar_mode";
 const STORED_AVATAR_PRESET = localStorage.getItem(AVATAR_STORAGE_KEY);
 const STORED_RENDER_QUALITY = localStorage.getItem(RENDER_QUALITY_STORAGE_KEY);
+const STORED_AVATAR_MODE = localStorage.getItem(AVATAR_MODE_STORAGE_KEY);
+const AVATAR_MODES = new Set(["three", "liveavatar"]);
+const DEFAULT_AVATAR_MODE = AVATAR_MODES.has(PARAMS.get("avatarMode"))
+  ? PARAMS.get("avatarMode")
+  : AVATAR_MODES.has(STORED_AVATAR_MODE)
+    ? STORED_AVATAR_MODE
+    : "three";
 const DEFAULT_AVATAR_PRESET = PARAMS.get("avatar")
   || (STORED_AVATAR_PRESET === "face" ? "face" : "clothed");
 const AVATAR_PRESET = AVATAR_PRESETS[DEFAULT_AVATAR_PRESET] ? DEFAULT_AVATAR_PRESET : "clothed";
@@ -75,6 +83,7 @@ const DEFAULT_RENDER_QUALITY = PARAMS.get("quality") || STORED_RENDER_QUALITY ||
 const RENDER_QUALITY = RENDER_QUALITY_PRESETS[DEFAULT_RENDER_QUALITY] ? DEFAULT_RENDER_QUALITY : "balanced";
 const OVR_LIPSYNC_URL = "ws://127.0.0.1:8765";
 const AUDIO2FACE_URL = PARAMS.get("audio2FaceUrl") || "ws://127.0.0.1:8766";
+const LIVEAVATAR_BRIDGE_URL = PARAMS.get("liveAvatarBridgeUrl") || "ws://127.0.0.1:8788/liveavatar";
 const RENDER_FPS = Number(PARAMS.get("fps") || 30);
 const MORPH_EPSILON = 0.005;
 const HEAD_MORPH_EPSILON = 0.0007;
@@ -207,8 +216,13 @@ const METRICS_COLUMNS = [
 
 const elements = {
   stage: document.getElementById("avatarStage"),
+  stageShell: document.querySelector(".stage"),
+  avatarModeSelect: document.getElementById("avatarModeSelect"),
   avatarSelect: document.getElementById("avatarSelect"),
   renderQualitySelect: document.getElementById("renderQualitySelect"),
+  liveAvatarStage: document.getElementById("liveAvatarStage"),
+  liveAvatarVideo: document.getElementById("liveAvatarVideo"),
+  liveAvatarPlaceholder: document.getElementById("liveAvatarPlaceholder"),
   micSelect: document.getElementById("micSelect"),
   apiKeyInput: document.getElementById("apiKeyInput"),
   voiceSelect: document.getElementById("voiceSelect"),
@@ -329,6 +343,7 @@ const state = {
   renderer: null,
   controls: null,
   avatarRoot: null,
+  avatarMode: DEFAULT_AVATAR_MODE,
   avatarPreset: AVATAR_PRESET,
   avatarUrl: AVATAR_URL,
   renderQuality: RENDER_QUALITY,
@@ -344,6 +359,11 @@ const state = {
   blink: null,
   naturalBlinkLeft: 0,
   naturalBlinkRight: 0,
+  liveAvatarSocket: null,
+  liveAvatarReady: false,
+  liveAvatarRoom: null,
+  liveAvatarMediaStream: null,
+  liveAvatarAudioChunksSent: 0,
   a2fBlinkLeft: 0,
   a2fBlinkRight: 0,
   closingManually: false,
@@ -373,12 +393,14 @@ function setStatus(text, mode = "idle") {
 
 function setButtons() {
   elements.startButton.disabled = state.starting || state.ready || state.directAudio2Face;
-  elements.micA2FButton.disabled = state.starting || state.ready;
+  elements.micA2FButton.disabled = state.avatarMode === "liveavatar" || state.starting || state.ready;
   elements.micA2FButton.textContent = state.directAudio2Face ? "Detener microfono -> avatar" : "Microfono -> avatar";
   elements.stopButton.disabled = !state.socket && !state.ready && !state.starting && !state.directAudio2Face;
   elements.muteButton.disabled = !state.ready && !state.directAudio2Face;
   elements.muteButton.textContent = state.muted ? "Activar" : "Mutear";
-  elements.pauseAvatarButton.textContent = state.avatarPaused ? "Mostrar avatar" : "Pausar avatar";
+  elements.pauseAvatarButton.textContent = state.avatarPaused
+    ? (state.avatarMode === "liveavatar" ? "Mostrar video" : "Mostrar avatar")
+    : (state.avatarMode === "liveavatar" ? "Pausar video" : "Pausar avatar");
 }
 
 function clearActionPanel() {
@@ -2577,8 +2599,12 @@ async function startSession() {
 
     socket.send(JSON.stringify(buildGeminiSetup()));
     await setupReady;
-    connectOvrLipSync();
-    connectAudio2Face();
+    if (isLiveAvatarMode()) {
+      connectLiveAvatarBridge();
+    } else {
+      connectOvrLipSync();
+      connectAudio2Face();
+    }
     setStatus("Escuchando", "ready");
     updateMicStatus();
   } catch (error) {
@@ -2606,6 +2632,7 @@ async function stopSession() {
   stopQueuedPlayback();
   stopOvrLipSync();
   stopAudio2Face();
+  stopLiveAvatarBridge();
   if (state.socket) {
     const socket = state.socket;
     state.socket = null;
@@ -2620,6 +2647,10 @@ async function stopSession() {
 }
 
 async function startDirectAudio2Face() {
+  if (isLiveAvatarMode()) {
+    setStatus("Microfono -> avatar no aplica en LiveAvatar", "idle");
+    return;
+  }
   if (state.starting || state.ready) return;
   if (state.directAudio2Face) {
     await stopSession();
@@ -2953,7 +2984,11 @@ async function handleGeminiMessage(rawEvent) {
       if (transcript) {
         maybeRequestEarlyGesture(true);
       }
-      endAudio2FaceTurn();
+      if (isLiveAvatarMode()) {
+        endLiveAvatarTurn();
+      } else {
+        endAudio2FaceTurn();
+      }
       state.responseTranscript = "";
       state.lastGestureTextLength = 0;
       setStatus(state.muted ? "Microfono muteado" : "Escuchando", "ready");
@@ -3348,6 +3383,9 @@ function playPcm16Audio(base64, mimeType) {
   const bytes = base64ToBytes(base64);
   const samples = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
   const rate = audioRateFromMime(mimeType);
+  if (isLiveAvatarMode() && sendToLiveAvatar(bytes, rate)) {
+    return;
+  }
   const context = ensurePlaybackContext();
   const buffer = context.createBuffer(1, samples.length, rate);
   const channel = buffer.getChannelData(0);
@@ -3428,9 +3466,161 @@ function stopAudio2Face() {
   }
 }
 
+function isLiveAvatarMode() {
+  return state.avatarMode === "liveavatar";
+}
+
+function setLiveAvatarStatus(text, mode = "idle") {
+  const suffix = mode === "ready" ? "conectado" : mode === "error" ? "error" : "esperando";
+  setGestureStatus(`LiveAvatar: ${text || suffix}`);
+}
+
+function liveAvatarClient() {
+  return window.LivekitClient || window.LiveKitClient || null;
+}
+
+async function connectLiveAvatarRoom(payload = {}) {
+  const client = liveAvatarClient();
+  if (!client) {
+    setLiveAvatarStatus("falta LiveKit client", "error");
+    return;
+  }
+
+  const url = payload.url || payload.livekitUrl || payload.livekit_url;
+  const token = payload.access_token || payload.accessToken || payload.token;
+  if (!url || !token) {
+    setLiveAvatarStatus("bridge sin url/token LiveKit", "error");
+    return;
+  }
+
+  if (state.liveAvatarRoom) {
+    state.liveAvatarRoom.disconnect();
+  }
+
+  const room = new client.Room({ adaptiveStream: true, dynacast: true });
+  const mediaStream = new MediaStream();
+  state.liveAvatarRoom = room;
+  state.liveAvatarMediaStream = mediaStream;
+
+  room.on(client.RoomEvent.TrackSubscribed, (track) => {
+    if (track.kind !== "video" && track.kind !== "audio") return;
+    mediaStream.addTrack(track.mediaStreamTrack);
+    if (elements.liveAvatarVideo) {
+      elements.liveAvatarVideo.srcObject = mediaStream;
+      elements.liveAvatarStage?.classList.toggle("has-stream", mediaStream.getVideoTracks().length > 0);
+    }
+  });
+  room.on(client.RoomEvent.TrackUnsubscribed, (track) => {
+    if (track.mediaStreamTrack) mediaStream.removeTrack(track.mediaStreamTrack);
+  });
+  room.on(client.RoomEvent.Disconnected, () => {
+    elements.liveAvatarStage?.classList.remove("has-stream");
+    setLiveAvatarStatus("WebRTC desconectado");
+  });
+
+  await room.connect(url, token);
+  setLiveAvatarStatus("WebRTC conectado", "ready");
+}
+
+function handleLiveAvatarBridgeMessage(message = {}) {
+  if (message.type === "ready") {
+    state.liveAvatarReady = true;
+    setLiveAvatarStatus(message.message || "bridge listo", "ready");
+    return;
+  }
+  if (message.type === "status") {
+    setLiveAvatarStatus(message.message || "estado bridge");
+    return;
+  }
+  if (message.type === "error") {
+    setLiveAvatarStatus(message.message || "error bridge", "error");
+    return;
+  }
+  if (message.type === "livekit" || message.type === "session") {
+    connectLiveAvatarRoom(message).catch((error) => {
+      setLiveAvatarStatus(error.message || "no se pudo conectar WebRTC", "error");
+    });
+  }
+}
+
+function connectLiveAvatarBridge() {
+  if (!isLiveAvatarMode() || state.liveAvatarSocket) return;
+  try {
+    const socket = new WebSocket(LIVEAVATAR_BRIDGE_URL);
+    state.liveAvatarSocket = socket;
+    setLiveAvatarStatus("conectando bridge");
+    socket.onopen = () => {
+      state.liveAvatarReady = true;
+      socket.send(JSON.stringify({
+        type: "hello",
+        mode: "liveavatar_lite",
+        audio: { mimeType: "audio/pcm;rate=24000" },
+      }));
+      setLiveAvatarStatus("bridge conectado", "ready");
+    };
+    socket.onmessage = (event) => {
+      try {
+        handleLiveAvatarBridgeMessage(JSON.parse(event.data));
+      } catch (error) {
+        console.debug("LiveAvatar bridge message ignored:", error);
+      }
+    };
+    socket.onerror = () => {
+      state.liveAvatarReady = false;
+      setLiveAvatarStatus("bridge no disponible", "error");
+    };
+    socket.onclose = () => {
+      state.liveAvatarSocket = null;
+      state.liveAvatarReady = false;
+      setLiveAvatarStatus("bridge cerrado");
+    };
+  } catch (error) {
+    setLiveAvatarStatus(error.message || "no se pudo abrir bridge", "error");
+  }
+}
+
+function stopLiveAvatarBridge() {
+  if (state.liveAvatarSocket) {
+    try {
+      state.liveAvatarSocket.close();
+    } catch {
+      // Ignore close errors.
+    }
+  }
+  state.liveAvatarSocket = null;
+  state.liveAvatarReady = false;
+  if (state.liveAvatarRoom) {
+    state.liveAvatarRoom.disconnect();
+  }
+  state.liveAvatarRoom = null;
+  state.liveAvatarMediaStream = null;
+  if (elements.liveAvatarVideo) {
+    elements.liveAvatarVideo.srcObject = null;
+  }
+  elements.liveAvatarStage?.classList.remove("has-stream");
+}
+
+function sendToLiveAvatar(bytes, rate) {
+  if (!isLiveAvatarMode() || !state.liveAvatarSocket || state.liveAvatarSocket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+  state.liveAvatarSocket.send(JSON.stringify({
+    type: "audio",
+    mimeType: `audio/pcm;rate=${rate}`,
+    data: bytesToBase64(bytes),
+  }));
+  state.liveAvatarAudioChunksSent += 1;
+  return true;
+}
+
+function endLiveAvatarTurn() {
+  if (!isLiveAvatarMode() || !state.liveAvatarSocket || state.liveAvatarSocket.readyState !== WebSocket.OPEN) return;
+  state.liveAvatarSocket.send(JSON.stringify({ type: "speak_end" }));
+}
+
 function setAvatarPaused(paused) {
   state.avatarPaused = paused;
-  elements.stage.classList.toggle("is-paused", paused);
+  elements.stageShell?.classList.toggle("is-paused", paused);
   clearExpressionTimeouts();
   resetSemanticExpression();
   setMouthLevel(0);
@@ -3454,6 +3644,9 @@ function setAvatarPaused(paused) {
 function restoreSettings() {
   const savedKey = localStorage.getItem(STORAGE_KEY);
   if (savedKey) elements.apiKeyInput.value = savedKey;
+  if (elements.avatarModeSelect) {
+    elements.avatarModeSelect.value = state.avatarMode;
+  }
   if (elements.avatarSelect) {
     elements.avatarSelect.value = state.avatarPreset;
   }
@@ -3480,6 +3673,35 @@ function restoreSettings() {
   updateExpressivenessControls();
 }
 
+function applyAvatarModeUi() {
+  const liveAvatarMode = isLiveAvatarMode();
+  document.body.classList.toggle("is-liveavatar-mode", liveAvatarMode);
+  if (elements.liveAvatarStage) {
+    elements.liveAvatarStage.hidden = !liveAvatarMode;
+  }
+  elements.avatarSelect.disabled = liveAvatarMode;
+  elements.renderQualitySelect.disabled = liveAvatarMode;
+  elements.micA2FButton.disabled = liveAvatarMode || elements.micA2FButton.disabled;
+  [elements.mouthGainInput, elements.lowerFaceGainInput, elements.a2fSmoothingInput, elements.headMotionGainInput]
+    .filter(Boolean)
+    .forEach((input) => {
+      input.disabled = liveAvatarMode;
+    });
+  if (liveAvatarMode) {
+    setStatus("LiveAvatar LITE listo para bridge local", "idle");
+    setLiveAvatarStatus("esperando iniciar");
+  }
+  setButtons();
+}
+
+function changeAvatarMode(mode) {
+  if (!AVATAR_MODES.has(mode) || mode === state.avatarMode) return;
+  localStorage.setItem(AVATAR_MODE_STORAGE_KEY, mode);
+  const url = new URL(window.location.href);
+  url.searchParams.set("avatarMode", mode);
+  window.location.href = url.toString();
+}
+
 function changeAvatarPreset(preset) {
   if (!AVATAR_PRESETS[preset] || preset === state.avatarPreset) return;
   localStorage.setItem(AVATAR_STORAGE_KEY, preset);
@@ -3502,6 +3724,9 @@ elements.stopButton.addEventListener("click", stopSession);
 elements.micA2FButton.addEventListener("click", startDirectAudio2Face);
 elements.pauseAvatarButton.addEventListener("click", () => {
   setAvatarPaused(!state.avatarPaused);
+});
+elements.avatarModeSelect?.addEventListener("change", (event) => {
+  changeAvatarMode(event.target.value);
 });
 elements.avatarSelect?.addEventListener("change", (event) => {
   changeAvatarPreset(event.target.value);
@@ -3564,11 +3789,14 @@ window.addEventListener("beforeunload", () => {
 });
 
 restoreSettings();
+applyAvatarModeUi();
 refreshMicDevices().catch(() => {});
 setButtons();
 updateMetricsButtons();
-initThree();
-loadAvatar().catch((error) => {
-  console.error(error);
-  setStatus(error.message || "No se pudo cargar el avatar", "error");
-});
+if (!isLiveAvatarMode()) {
+  initThree();
+  loadAvatar().catch((error) => {
+    console.error(error);
+    setStatus(error.message || "No se pudo cargar el avatar", "error");
+  });
+}

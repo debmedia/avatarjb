@@ -219,6 +219,24 @@ http://127.0.0.1:5500/avatar3d-gemini-demo.html?audio2FaceUrl=ws://127.0.0.1:876
 Audio2Face blendshapes have priority over the older OVR-style/local lip-sync fallback when fresh
 frames are available.
 
+### HeyGen / LiveAvatar LITE mode
+
+The same Gemini + banking tool UI can be run with a photoreal LiveAvatar video surface instead of
+the local Three.js avatar:
+
+```text
+http://127.0.0.1:5500/avatar3d-gemini-demo.html?avatarMode=liveavatar
+```
+
+In this mode the browser sends Gemini PCM response chunks to a local bridge:
+
+```bash
+python scripts/liveavatar_bridge.py --host 127.0.0.1 --port 8788
+```
+
+Provider setup notes and required HeyGen/LiveAvatar credentials are in
+`docs/liveavatar-lite-adapter.md`.
+
 ## Embed examples
 
 ### Option A (recommended): script + tag attributes

@@ -13,12 +13,19 @@
       }
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script type="module" src="./js/avatar3d-gemini-demo.js"></script>
 </head>
 <body>
   <main class="demo-shell">
     <section class="stage" aria-label="Avatar 3D">
       <div id="avatarStage" class="stage-canvas"></div>
+      <div id="liveAvatarStage" class="liveavatar-stage" hidden>
+        <video id="liveAvatarVideo" autoplay playsinline></video>
+        <div id="liveAvatarPlaceholder" class="liveavatar-placeholder">
+          LiveAvatar LITE esperando bridge local
+        </div>
+      </div>
       <div class="status-pill">
         <span id="statusDot" class="status-dot"></span>
         <span id="statusText">Cargando avatar</span>
@@ -34,6 +41,14 @@
 
       <div class="panel-main">
         <div class="config-column">
+
+      <label>
+        Modo avatar
+        <select id="avatarModeSelect">
+          <option value="three">3D local + Audio2Face</option>
+          <option value="liveavatar">HeyGen / LiveAvatar LITE</option>
+        </select>
+      </label>
 
       <label>
         Avatar
