@@ -64,7 +64,7 @@ def load_env_file(path: Path) -> None:
 
 def load_env_files(primary_path: Path) -> None:
     load_env_file(primary_path)
-    if primary_path != LEGACY_ENV_FILE:
+    if primary_path != LEGACY_ENV_FILE and not primary_path.exists():
         load_env_file(LEGACY_ENV_FILE)
 
 
