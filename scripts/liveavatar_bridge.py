@@ -25,6 +25,8 @@ import base64
 import json
 import os
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -41,6 +43,8 @@ class BridgeState:
     audio_chunks: int = 0
     audio_bytes: int = 0
     turns: int = 0
+    avatar_id: str = ""
+    avatar_scope: str = "user"
 
 
 def load_env_file(path: Path) -> None:
@@ -66,6 +70,79 @@ def env_summary() -> dict[str, bool]:
     }
 
 
+def liveavatar_api_base() -> str:
+    return os.getenv("LIVEAVATAR_API_BASE", "https://api.liveavatar.com").rstrip("/")
+
+
+def liveavatar_headers() -> dict[str, str]:
+    api_key = os.getenv("LIVEAVATAR_API_KEY", "").strip()
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "avatarjb-liveavatar-bridge/0.1",
+    }
+    if api_key:
+        headers["X-API-KEY"] = api_key
+    return headers
+
+
+def normalize_avatar(raw: dict[str, Any]) -> dict[str, Any]:
+    avatar_id = raw.get("id") or raw.get("avatar_id") or raw.get("avatarId")
+    name = (
+        raw.get("name")
+        or raw.get("display_name")
+        or raw.get("displayName")
+        or raw.get("avatar_name")
+        or raw.get("title")
+        or avatar_id
+    )
+    thumbnail = (
+        raw.get("thumbnail_url")
+        or raw.get("thumbnailUrl")
+        or raw.get("preview_url")
+        or raw.get("previewUrl")
+        or raw.get("image_url")
+        or raw.get("imageUrl")
+    )
+    return {
+        "id": str(avatar_id or ""),
+        "name": str(name or ""),
+        "thumbnail_url": str(thumbnail or ""),
+        "raw": raw,
+    }
+
+
+def avatars_from_response(payload: Any) -> list[dict[str, Any]]:
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        for key in ("avatars", "items", "results", "data"):
+            if isinstance(data.get(key), list):
+                data = data[key]
+                break
+    if not isinstance(data, list):
+        return []
+    return [normalize_avatar(item) for item in data if isinstance(item, dict)]
+
+
+async def fetch_liveavatar_avatars(scope: str) -> list[dict[str, Any]]:
+    if not os.getenv("LIVEAVATAR_API_KEY"):
+        raise RuntimeError("Falta LIVEAVATAR_API_KEY en .env.liveavatar")
+    path = "/v1/avatars/public" if scope == "public" else "/v1/avatars"
+    url = f"{liveavatar_api_base()}{path}"
+
+    def request() -> list[dict[str, Any]]:
+        req = urllib.request.Request(url, headers=liveavatar_headers(), method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"LiveAvatar HTTP {error.code}: {detail[:300]}") from error
+        return avatars_from_response(payload)
+
+    return await asyncio.to_thread(request)
+
+
 async def send_json(socket: websockets.WebSocketServerProtocol, payload: dict[str, Any]) -> None:
     await socket.send(json.dumps(payload, separators=(",", ":")))
 
@@ -87,7 +164,30 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
 
         message_type = message.get("type")
         if message_type == "hello":
+            state.avatar_id = str(message.get("avatarId") or os.getenv("LIVEAVATAR_AVATAR_ID") or "").strip()
+            state.avatar_scope = str(message.get("avatarScope") or "user")
             await send_json(socket, {"type": "status", "message": "modo LiveAvatar LITE inicializado"})
+            continue
+
+        if message_type == "list_avatars":
+            scope = str(message.get("scope") or "user")
+            if scope not in {"user", "public"}:
+                scope = "user"
+            try:
+                avatars = await fetch_liveavatar_avatars(scope)
+            except Exception as error:
+                await send_json(socket, {"type": "error", "message": str(error)})
+                continue
+            await send_json(socket, {"type": "avatars", "scope": scope, "avatars": avatars})
+            continue
+
+        if message_type == "select_avatar":
+            state.avatar_id = str(message.get("avatarId") or "").strip()
+            state.avatar_scope = str(message.get("scope") or state.avatar_scope or "user")
+            await send_json(socket, {
+                "type": "status",
+                "message": f"avatar seleccionado {state.avatar_id or 'sin id'}",
+            })
             continue
 
         if message_type == "audio":

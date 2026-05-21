@@ -66,15 +66,26 @@ const EXPRESSIVENESS_STORAGE_KEY = "avatar3d_expressiveness";
 const AVATAR_STORAGE_KEY = "avatar3d_avatar_preset";
 const RENDER_QUALITY_STORAGE_KEY = "avatar3d_render_quality";
 const AVATAR_MODE_STORAGE_KEY = "avatar3d_avatar_mode";
+const LIVEAVATAR_ID_STORAGE_KEY = "avatar3d_liveavatar_id";
+const LIVEAVATAR_SCOPE_STORAGE_KEY = "avatar3d_liveavatar_scope";
 const STORED_AVATAR_PRESET = localStorage.getItem(AVATAR_STORAGE_KEY);
 const STORED_RENDER_QUALITY = localStorage.getItem(RENDER_QUALITY_STORAGE_KEY);
 const STORED_AVATAR_MODE = localStorage.getItem(AVATAR_MODE_STORAGE_KEY);
+const STORED_LIVEAVATAR_ID = localStorage.getItem(LIVEAVATAR_ID_STORAGE_KEY);
+const STORED_LIVEAVATAR_SCOPE = localStorage.getItem(LIVEAVATAR_SCOPE_STORAGE_KEY);
 const AVATAR_MODES = new Set(["three", "liveavatar"]);
+const LIVEAVATAR_SCOPES = new Set(["user", "public"]);
 const DEFAULT_AVATAR_MODE = AVATAR_MODES.has(PARAMS.get("avatarMode"))
   ? PARAMS.get("avatarMode")
   : AVATAR_MODES.has(STORED_AVATAR_MODE)
     ? STORED_AVATAR_MODE
     : "three";
+const DEFAULT_LIVEAVATAR_SCOPE = LIVEAVATAR_SCOPES.has(PARAMS.get("liveAvatarScope"))
+  ? PARAMS.get("liveAvatarScope")
+  : LIVEAVATAR_SCOPES.has(STORED_LIVEAVATAR_SCOPE)
+    ? STORED_LIVEAVATAR_SCOPE
+    : "user";
+const DEFAULT_LIVEAVATAR_ID = PARAMS.get("liveAvatarId") || STORED_LIVEAVATAR_ID || "";
 const DEFAULT_AVATAR_PRESET = PARAMS.get("avatar")
   || (STORED_AVATAR_PRESET === "face" ? "face" : "clothed");
 const AVATAR_PRESET = AVATAR_PRESETS[DEFAULT_AVATAR_PRESET] ? DEFAULT_AVATAR_PRESET : "clothed";
@@ -219,6 +230,10 @@ const elements = {
   stageShell: document.querySelector(".stage"),
   avatarModeSelect: document.getElementById("avatarModeSelect"),
   avatarSelect: document.getElementById("avatarSelect"),
+  liveAvatarScopeSelect: document.getElementById("liveAvatarScopeSelect"),
+  liveAvatarSelect: document.getElementById("liveAvatarSelect"),
+  refreshLiveAvatarsButton: document.getElementById("refreshLiveAvatarsButton"),
+  liveAvatarPickerStatus: document.getElementById("liveAvatarPickerStatus"),
   renderQualitySelect: document.getElementById("renderQualitySelect"),
   liveAvatarStage: document.getElementById("liveAvatarStage"),
   liveAvatarVideo: document.getElementById("liveAvatarVideo"),
@@ -364,6 +379,10 @@ const state = {
   liveAvatarRoom: null,
   liveAvatarMediaStream: null,
   liveAvatarAudioChunksSent: 0,
+  liveAvatarScope: DEFAULT_LIVEAVATAR_SCOPE,
+  liveAvatarId: DEFAULT_LIVEAVATAR_ID,
+  liveAvatarAvatars: [],
+  liveAvatarPendingAvatarList: false,
   a2fBlinkLeft: 0,
   a2fBlinkRight: 0,
   closingManually: false,
@@ -3475,6 +3494,65 @@ function setLiveAvatarStatus(text, mode = "idle") {
   setGestureStatus(`LiveAvatar: ${text || suffix}`);
 }
 
+function setLiveAvatarPickerStatus(text) {
+  if (elements.liveAvatarPickerStatus) {
+    elements.liveAvatarPickerStatus.textContent = text;
+  }
+}
+
+function liveAvatarLabel(avatar = {}) {
+  return String(
+    avatar.name
+      || avatar.display_name
+      || avatar.displayName
+      || avatar.avatar_name
+      || avatar.title
+      || avatar.id
+      || avatar.avatar_id
+      || "",
+  ).trim();
+}
+
+function liveAvatarId(avatar = {}) {
+  return String(avatar.id || avatar.avatar_id || avatar.avatarId || "").trim();
+}
+
+function updateLiveAvatarSelector(avatars = state.liveAvatarAvatars) {
+  if (!elements.liveAvatarSelect) return;
+  elements.liveAvatarSelect.innerHTML = "";
+  if (!avatars.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No hay avatares para este filtro";
+    elements.liveAvatarSelect.appendChild(option);
+    return;
+  }
+
+  avatars.forEach((avatar) => {
+    const id = liveAvatarId(avatar);
+    if (!id) return;
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = liveAvatarLabel(avatar) || id;
+    if (id === state.liveAvatarId) option.selected = true;
+    elements.liveAvatarSelect.appendChild(option);
+  });
+
+  if (!state.liveAvatarId && elements.liveAvatarSelect.value) {
+    selectLiveAvatar(elements.liveAvatarSelect.value, { persist: true, notifyBridge: false });
+  } else if (state.liveAvatarId) {
+    elements.liveAvatarSelect.value = state.liveAvatarId;
+  }
+}
+
+function handleLiveAvatarList(message = {}) {
+  const scope = LIVEAVATAR_SCOPES.has(message.scope) ? message.scope : state.liveAvatarScope;
+  if (scope !== state.liveAvatarScope) return;
+  state.liveAvatarAvatars = Array.isArray(message.avatars) ? message.avatars : [];
+  updateLiveAvatarSelector();
+  setLiveAvatarPickerStatus(`${state.liveAvatarAvatars.length} avatares`);
+}
+
 function liveAvatarClient() {
   return window.LivekitClient || window.LiveKitClient || null;
 }
@@ -3534,6 +3612,11 @@ function handleLiveAvatarBridgeMessage(message = {}) {
   }
   if (message.type === "error") {
     setLiveAvatarStatus(message.message || "error bridge", "error");
+    setLiveAvatarPickerStatus(message.message || "error bridge");
+    return;
+  }
+  if (message.type === "avatars") {
+    handleLiveAvatarList(message);
     return;
   }
   if (message.type === "livekit" || message.type === "session") {
@@ -3554,9 +3637,14 @@ function connectLiveAvatarBridge() {
       socket.send(JSON.stringify({
         type: "hello",
         mode: "liveavatar_lite",
+        avatarId: state.liveAvatarId,
+        avatarScope: state.liveAvatarScope,
         audio: { mimeType: "audio/pcm;rate=24000" },
       }));
       setLiveAvatarStatus("bridge conectado", "ready");
+      if (state.liveAvatarPendingAvatarList || !state.liveAvatarAvatars.length) {
+        requestLiveAvatarAvatars();
+      }
     };
     socket.onmessage = (event) => {
       try {
@@ -3598,6 +3686,41 @@ function stopLiveAvatarBridge() {
     elements.liveAvatarVideo.srcObject = null;
   }
   elements.liveAvatarStage?.classList.remove("has-stream");
+}
+
+function sendLiveAvatarBridgeMessage(payload = {}) {
+  if (!isLiveAvatarMode()) return false;
+  if (!state.liveAvatarSocket || state.liveAvatarSocket.readyState !== WebSocket.OPEN) return false;
+  state.liveAvatarSocket.send(JSON.stringify(payload));
+  return true;
+}
+
+function requestLiveAvatarAvatars() {
+  if (!isLiveAvatarMode()) return;
+  state.liveAvatarPendingAvatarList = true;
+  setLiveAvatarPickerStatus("Cargando...");
+  if (!sendLiveAvatarBridgeMessage({ type: "list_avatars", scope: state.liveAvatarScope })) {
+    connectLiveAvatarBridge();
+    return;
+  }
+  state.liveAvatarPendingAvatarList = false;
+}
+
+function selectLiveAvatar(id, options = {}) {
+  state.liveAvatarId = String(id || "").trim();
+  if (elements.liveAvatarSelect && elements.liveAvatarSelect.value !== state.liveAvatarId) {
+    elements.liveAvatarSelect.value = state.liveAvatarId;
+  }
+  if (options.persist !== false) {
+    localStorage.setItem(LIVEAVATAR_ID_STORAGE_KEY, state.liveAvatarId);
+  }
+  if (options.notifyBridge !== false) {
+    sendLiveAvatarBridgeMessage({
+      type: "select_avatar",
+      avatarId: state.liveAvatarId,
+      scope: state.liveAvatarScope,
+    });
+  }
 }
 
 function sendToLiveAvatar(bytes, rate) {
@@ -3647,6 +3770,17 @@ function restoreSettings() {
   if (elements.avatarModeSelect) {
     elements.avatarModeSelect.value = state.avatarMode;
   }
+  if (elements.liveAvatarScopeSelect) {
+    elements.liveAvatarScopeSelect.value = state.liveAvatarScope;
+  }
+  if (elements.liveAvatarSelect && state.liveAvatarId) {
+    elements.liveAvatarSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = state.liveAvatarId;
+    option.textContent = state.liveAvatarId;
+    option.selected = true;
+    elements.liveAvatarSelect.appendChild(option);
+  }
   if (elements.avatarSelect) {
     elements.avatarSelect.value = state.avatarPreset;
   }
@@ -3690,6 +3824,7 @@ function applyAvatarModeUi() {
   if (liveAvatarMode) {
     setStatus("LiveAvatar LITE listo para bridge local", "idle");
     setLiveAvatarStatus("esperando iniciar");
+    requestLiveAvatarAvatars();
   }
   setButtons();
 }
@@ -3700,6 +3835,15 @@ function changeAvatarMode(mode) {
   const url = new URL(window.location.href);
   url.searchParams.set("avatarMode", mode);
   window.location.href = url.toString();
+}
+
+function changeLiveAvatarScope(scope) {
+  if (!LIVEAVATAR_SCOPES.has(scope)) return;
+  state.liveAvatarScope = scope;
+  state.liveAvatarAvatars = [];
+  localStorage.setItem(LIVEAVATAR_SCOPE_STORAGE_KEY, scope);
+  updateLiveAvatarSelector([]);
+  requestLiveAvatarAvatars();
 }
 
 function changeAvatarPreset(preset) {
@@ -3728,6 +3872,13 @@ elements.pauseAvatarButton.addEventListener("click", () => {
 elements.avatarModeSelect?.addEventListener("change", (event) => {
   changeAvatarMode(event.target.value);
 });
+elements.liveAvatarScopeSelect?.addEventListener("change", (event) => {
+  changeLiveAvatarScope(event.target.value);
+});
+elements.liveAvatarSelect?.addEventListener("change", (event) => {
+  selectLiveAvatar(event.target.value);
+});
+elements.refreshLiveAvatarsButton?.addEventListener("click", requestLiveAvatarAvatars);
 elements.avatarSelect?.addEventListener("change", (event) => {
   changeAvatarPreset(event.target.value);
 });

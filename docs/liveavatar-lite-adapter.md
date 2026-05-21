@@ -65,12 +65,18 @@ $headers = @{ "X-API-KEY" = $env:LIVEAVATAR_API_KEY }
 Invoke-RestMethod -Headers $headers -Uri "https://api.liveavatar.com/v1/avatars/public"
 ```
 
+The demo UI also exposes this through `avatarMode=liveavatar`: use **Filtro LiveAvatar** to switch
+between account avatars and public avatars, then choose **Avatar LiveAvatar**. The selected id is
+stored in browser localStorage and sent to the local bridge as `select_avatar`.
+
 ## Bridge protocol
 
 Browser to bridge:
 
 ```json
 {"type":"hello","mode":"liveavatar_lite","audio":{"mimeType":"audio/pcm;rate=24000"}}
+{"type":"list_avatars","scope":"user"}
+{"type":"select_avatar","avatarId":"<avatar-id>","scope":"user"}
 {"type":"audio","mimeType":"audio/pcm;rate=24000","data":"<base64 pcm16 mono>"}
 {"type":"speak_end"}
 ```
@@ -80,6 +86,7 @@ Bridge to browser:
 ```json
 {"type":"ready","message":"bridge listo"}
 {"type":"status","message":"..."}
+{"type":"avatars","scope":"user","avatars":[{"id":"...","name":"..."}]}
 {"type":"livekit","url":"<room url>","access_token":"<client token>"}
 {"type":"error","message":"..."}
 ```

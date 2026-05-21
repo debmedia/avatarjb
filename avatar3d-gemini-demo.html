@@ -61,6 +61,26 @@
         </select>
       </label>
 
+      <div class="liveavatar-controls" aria-label="Seleccion de avatar LiveAvatar">
+        <label>
+          Filtro LiveAvatar
+          <select id="liveAvatarScopeSelect">
+            <option value="user">Mis avatares</option>
+            <option value="public">Publicos</option>
+          </select>
+        </label>
+        <label>
+          Avatar LiveAvatar
+          <select id="liveAvatarSelect">
+            <option value="">Conecta el bridge para cargar avatares</option>
+          </select>
+        </label>
+        <div class="liveavatar-picker-row">
+          <button id="refreshLiveAvatarsButton" type="button">Actualizar avatares</button>
+          <span id="liveAvatarPickerStatus">Bridge local requerido</span>
+        </div>
+      </div>
+
       <label>
         Calidad render
         <select id="renderQualitySelect">
