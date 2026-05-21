@@ -1,37 +1,47 @@
 # HeyGen / LiveAvatar LITE adapter
 
-Goal: keep this app's current stack for conversation control:
+Goal: keep this app's current conversation stack while using LiveAvatar only as the realtime video layer:
 
 - Browser microphone -> Gemini Live
 - Gemini tool calls -> local banking UI buttons
-- Gemini response audio -> local `liveavatar_bridge.py`
-- LiveAvatar LITE/CUSTOM -> realtime photoreal video stream
+- Gemini response audio -> LiveAvatar command WebSocket from the browser
+- LiveAvatar LITE -> realtime photoreal video stream through LiveKit
 
-The browser never stores the LiveAvatar API key. Provider secrets belong in the local bridge or a
-backend service.
+The browser never receives the LiveAvatar API key. Provider secrets stay in the local bridge or a backend service.
 
-## Current branch status
-
-The UI already supports `avatarMode=liveavatar`:
+## Current flow
 
 ```text
-http://127.0.0.1:8000/avatar3d-gemini-demo.html?avatarMode=liveavatar
+Browser
+  1. Opens local bridge ws://127.0.0.1:8788/liveavatar
+  2. Asks bridge to list avatars / create a LITE session
+  3. Receives livekit_url, livekit_client_token and ws_url
+  4. Connects LiveKit directly for video
+  5. Connects ws_url directly and sends agent.speak / agent.speak_end
+  6. Connects Gemini Live directly for conversation audio/tools
+
+Bridge
+  1. Reads .env
+  2. Uses LIVEAVATAR_API_KEY or HEYGEN_API_KEY
+  3. Calls LiveAvatar sessions/token and sessions/start
+  4. Returns short-lived session credentials to the browser
+  5. Stops the session when requested
 ```
 
-In this mode the Three.js canvas is hidden, Audio2Face is skipped, and Gemini PCM output is sent to:
+This avoids sending every Gemini audio chunk through localhost, which reduces the audio path by one WebSocket hop.
 
-```text
-ws://127.0.0.1:8788/liveavatar
-```
+## Run locally
 
-Run the placeholder bridge:
-
-```bash
+```powershell
 python scripts/liveavatar_bridge.py --host 127.0.0.1 --port 8788
+python -m http.server 8000
 ```
 
-The bridge currently validates the browser protocol and counts audio chunks. The provider-specific
-LiveAvatar session creation and WebRTC handoff are the next piece.
+Open:
+
+```text
+http://127.0.0.1:8000/avatar3d-gemini-demo.html
+```
 
 ## Local configuration
 
@@ -42,34 +52,20 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-`.env` is ignored by Git. The bridge also accepts regular environment variables if you prefer
-setting them in the current shell:
+`.env` is ignored by Git.
 
 ```powershell
-$env:GEMINI_API_KEY="AIza..."
-$env:HEYGEN_API_KEY="..."
-$env:LIVEAVATAR_API_KEY="la_..."
-$env:LIVEAVATAR_AVATAR_ID="00000000-0000-0000-0000-000000000000"
-$env:LIVEAVATAR_IS_SANDBOX="true"
+GEMINI_API_KEY=AIza...
+HEYGEN_API_KEY=...
+LIVEAVATAR_API_KEY=...
+LIVEAVATAR_API_BASE=https://api.liveavatar.com
+LIVEAVATAR_AVATAR_ID=
+LIVEAVATAR_IS_SANDBOX=true
+LIVEAVATAR_SANDBOX_AVATAR_ID=65f9e3c9-d48b-4118-b73a-4ae2e3cbb8f0
+LIVEAVATAR_AUTO_START=true
+LIVEAVATAR_VIDEO_QUALITY=medium
+LIVEAVATAR_VIDEO_ENCODING=VP8
 ```
-
-To list your account avatars:
-
-```powershell
-$headers = @{ "X-API-KEY" = $env:LIVEAVATAR_API_KEY }
-Invoke-RestMethod -Headers $headers -Uri "https://api.liveavatar.com/v1/avatars"
-```
-
-To list public avatars:
-
-```powershell
-$headers = @{ "X-API-KEY" = $env:LIVEAVATAR_API_KEY }
-Invoke-RestMethod -Headers $headers -Uri "https://api.liveavatar.com/v1/avatars/public"
-```
-
-The demo UI also exposes this through `avatarMode=liveavatar`: use **Filtro LiveAvatar** to switch
-between account avatars and public avatars, then choose **Avatar LiveAvatar**. The selected id is
-stored in browser localStorage and sent to the local bridge as `select_avatar`.
 
 ## Bridge protocol
 
@@ -77,37 +73,33 @@ Browser to bridge:
 
 ```json
 {"type":"hello","mode":"liveavatar_lite","audio":{"mimeType":"audio/pcm;rate=24000"}}
-{"type":"list_avatars","scope":"user"}
-{"type":"select_avatar","avatarId":"<avatar-id>","scope":"user"}
-{"type":"audio","mimeType":"audio/pcm;rate=24000","data":"<base64 pcm16 mono>"}
-{"type":"speak_end"}
+{"type":"list_avatars","scope":"public"}
+{"type":"select_avatar","avatarId":"<avatar-id>","scope":"public"}
+{"type":"start_session","avatarId":"<avatar-id>","scope":"public"}
+{"type":"stop_session"}
 ```
 
 Bridge to browser:
 
 ```json
-{"type":"ready","message":"bridge listo"}
+{"type":"ready","message":"bridge LiveAvatar conectado","config":{"geminiApiKey":"..."}}
+{"type":"avatars","scope":"public","avatars":[{"id":"...","name":"..."}]}
+{"type":"session","audioPath":"browser_direct","url":"<livekit_url>","access_token":"<livekit_client_token>","ws_url":"<liveavatar_ws_url>"}
 {"type":"status","message":"..."}
-{"type":"avatars","scope":"user","avatars":[{"id":"...","name":"..."}]}
-{"type":"livekit","url":"<room url>","access_token":"<client token>"}
 {"type":"error","message":"..."}
 ```
 
-When the bridge sends `livekit`, the frontend connects the embedded LiveKit client and attaches the
-remote audio/video tracks to the LiveAvatar video element.
+The browser sends realtime audio directly to `ws_url`:
 
-## Data needed from HeyGen / LiveAvatar
+```json
+{"type":"agent.speak","event_id":"turn-1","audio":"<base64 pcm16 24khz>"}
+{"type":"agent.speak_end","event_id":"turn-1"}
+{"type":"agent.interrupt"}
+{"type":"session.keep_alive","event_id":"keepalive-..."}
+```
 
-- `LIVEAVATAR_API_KEY`: developer API key.
-- `LIVEAVATAR_AVATAR_ID`: the avatar/replica id to render.
-- LITE/CUSTOM session configuration required by the account, especially WebRTC provider settings.
-- Whether to run in sandbox/test mode first.
-- Desired video quality/resolution and max session duration.
-- Whether Gemini audio is the final voice, or whether LiveAvatar should use a separate TTS voice.
+## Notes
 
-If using an older HeyGen Streaming API instead of LiveAvatar LITE, we need:
-
-- HeyGen API key.
-- Streaming `avatar_name` / `avatar_id`.
-- Optional `voice_id`.
-- Whether tasks should be `repeat` (we provide final text) or audio-to-video (we provide PCM audio).
+- In sandbox mode, not every public avatar is supported. The bridge falls back to `LIVEAVATAR_SANDBOX_AVATAR_ID` when the selected avatar is rejected for sandbox.
+- `Mis avatares` can return zero if the key has no private LiveAvatar avatars or does not have the expected account permissions.
+- The backend should not return raw LiveAvatar API keys to the browser. It should return only short-lived session credentials.

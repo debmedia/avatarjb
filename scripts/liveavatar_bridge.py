@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Local bridge for Gemini audio -> HeyGen LiveAvatar LITE.
+"""Local session bridge for Gemini -> HeyGen LiveAvatar LITE.
 
-The browser keeps the Gemini realtime session and sends generated PCM audio to
-this bridge. The bridge owns the LiveAvatar API key, creates a LITE session,
-connects to the LiveAvatar command WebSocket, and forwards audio as
-``agent.speak`` events.
+The browser keeps the Gemini realtime session. This bridge owns the LiveAvatar
+API key, creates a LITE session, returns LiveKit credentials plus the provider
+``ws_url``, and then the browser sends audio directly to LiveAvatar.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ import argparse
 import asyncio
 import json
 import os
-import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -37,17 +35,11 @@ class LiveAvatarSession:
     livekit_url: str = ""
     livekit_client_token: str = ""
     ws_url: str = ""
-    provider_ws: websockets.WebSocketClientProtocol | None = None
-    provider_reader: asyncio.Task | None = None
-    keep_alive_task: asyncio.Task | None = None
-    connected: asyncio.Event | None = None
 
 
 @dataclass
 class BridgeState:
     started_at: float
-    audio_chunks: int = 0
-    audio_bytes: int = 0
     turns: int = 0
     avatar_id: str = ""
     avatar_scope: str = "public"
@@ -252,71 +244,11 @@ async def send_json(socket: websockets.WebSocketServerProtocol, payload: dict[st
         pass
 
 
-async def read_provider_events(
-    browser: websockets.WebSocketServerProtocol,
-    session: LiveAvatarSession,
-) -> None:
-    assert session.provider_ws is not None
-    try:
-        async for raw_event in session.provider_ws:
-            try:
-                event = json.loads(raw_event)
-            except json.JSONDecodeError:
-                await send_json(browser, {"type": "provider_event", "event": {"raw": str(raw_event)[:300]}})
-                continue
-
-            event_type = event.get("type")
-            if event_type == "session.state_updated" and event.get("state") == "connected":
-                if session.connected:
-                    session.connected.set()
-            await send_json(browser, {"type": "provider_event", "event": event})
-    except asyncio.CancelledError:
-        raise
-    except Exception as error:
-        await send_json(browser, {"type": "error", "message": f"LiveAvatar WS: {error}"})
-
-
-async def keep_provider_alive(session: LiveAvatarSession) -> None:
-    while True:
-        await asyncio.sleep(45)
-        if not session.provider_ws:
-            return
-        await session.provider_ws.send(json.dumps({
-            "type": "session.keep_alive",
-            "event_id": f"keepalive-{int(time.time())}",
-        }))
-
-
-async def connect_provider_ws(browser: websockets.WebSocketServerProtocol, session: LiveAvatarSession) -> bool:
-    if not session.ws_url:
-        await send_json(browser, {"type": "status", "message": "LiveAvatar arranco sin ws_url; video puede verse, pero no se puede enviar audio LITE"})
-        return False
-
-    session.connected = asyncio.Event()
-    session.provider_ws = await websockets.connect(session.ws_url, ping_interval=20, ping_timeout=20)
-    session.provider_reader = asyncio.create_task(read_provider_events(browser, session))
-    session.keep_alive_task = asyncio.create_task(keep_provider_alive(session))
-    try:
-        await asyncio.wait_for(session.connected.wait(), timeout=12)
-        return True
-    except asyncio.TimeoutError:
-        await send_json(browser, {"type": "status", "message": "LiveAvatar WS conectado; esperando estado connected"})
-        return False
-
-
 async def stop_liveavatar_session(state: BridgeState) -> None:
     session = state.session
     state.session = None
     if not session:
         return
-    for task in (session.keep_alive_task, session.provider_reader):
-        if task:
-            task.cancel()
-    if session.provider_ws:
-        try:
-            await session.provider_ws.close()
-        except Exception:
-            pass
     await asyncio.to_thread(stop_session_sync, session)
 
 
@@ -368,7 +300,6 @@ async def create_liveavatar_session(
     if not session.livekit_url or not session.livekit_client_token:
         raise RuntimeError("LiveAvatar no devolvio livekit_url/livekit_client_token")
 
-    provider_connected = await connect_provider_ws(browser, session)
     await send_json(browser, {
         "type": "session",
         "avatarId": session.avatar_id,
@@ -377,8 +308,11 @@ async def create_liveavatar_session(
         "sessionId": session.session_id,
         "url": session.livekit_url,
         "access_token": session.livekit_client_token,
-        "wsReady": provider_connected,
-        "message": "LiveAvatar conectado" if provider_connected else "LiveAvatar video conectado; WS de audio pendiente",
+        "ws_url": session.ws_url,
+        "wsUrl": session.ws_url,
+        "audioPath": "browser_direct",
+        "wsReady": False,
+        "message": "LiveAvatar session creada; audio directo desde navegador",
     })
     return session
 
@@ -387,39 +321,8 @@ def sandbox_avatar_id() -> str:
     return os.getenv("LIVEAVATAR_SANDBOX_AVATAR_ID", DEFAULT_SANDBOX_AVATAR_ID).strip()
 
 
-async def send_audio_to_provider(state: BridgeState, audio_base64: str) -> None:
-    session = state.session
-    if not session or not session.provider_ws:
-        raise RuntimeError("LiveAvatar no tiene sesion de audio activa")
-    event_id = f"turn-{state.turns + 1}"
-    await session.provider_ws.send(json.dumps({
-        "type": "agent.speak",
-        "event_id": event_id,
-        "audio": audio_base64,
-    }))
-
-
-async def end_provider_turn(state: BridgeState) -> None:
-    session = state.session
-    if not session or not session.provider_ws:
-        return
-    event_id = f"turn-{state.turns + 1}"
-    await session.provider_ws.send(json.dumps({
-        "type": "agent.speak_end",
-        "event_id": event_id,
-    }))
-    state.turns += 1
-
-
-async def interrupt_provider(state: BridgeState) -> None:
-    session = state.session
-    if not session or not session.provider_ws:
-        return
-    await session.provider_ws.send(json.dumps({"type": "agent.interrupt"}))
-
-
 async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
-    state = BridgeState(started_at=time.time())
+    state = BridgeState(started_at=asyncio.get_running_loop().time())
     await send_json(socket, {
         "type": "ready",
         "message": "bridge LiveAvatar conectado",
@@ -483,22 +386,16 @@ async def handle_client(socket: websockets.WebSocketServerProtocol) -> None:
                 continue
 
             if message_type == "interrupt":
-                await interrupt_provider(state)
+                await send_json(socket, {"type": "status", "message": "interrupt ignorado: audio directo desde navegador"})
                 continue
 
             if message_type == "audio":
-                audio_base64 = str(message.get("data") or "")
-                state.audio_chunks += 1
-                state.audio_bytes += len(audio_base64)
-                try:
-                    await send_audio_to_provider(state, audio_base64)
-                except Exception as error:
-                    await send_json(socket, {"type": "error", "message": str(error)})
+                await send_json(socket, {"type": "status", "message": "audio ignorado: el navegador envia directo a LiveAvatar"})
                 continue
 
             if message_type == "speak_end":
-                await end_provider_turn(state)
-                await send_json(socket, {"type": "status", "message": f"turno {state.turns} enviado a LiveAvatar"})
+                state.turns += 1
+                await send_json(socket, {"type": "status", "message": f"turno {state.turns} cerrado en modo directo"})
                 continue
 
             await send_json(socket, {"type": "status", "message": f"evento ignorado: {message_type}"})

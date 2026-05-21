@@ -53,7 +53,12 @@ const state = {
   liveAvatarHasVideo: false,
   liveAvatarRoom: null,
   liveAvatarMediaStream: null,
+  liveAvatarCommandSocket: null,
+  liveAvatarCommandReady: false,
+  liveAvatarCommandQueue: [],
+  liveAvatarKeepAliveTimer: 0,
   liveAvatarAudioChunksSent: 0,
+  liveAvatarTurn: 0,
   liveAvatarScope: DEFAULT_LIVEAVATAR_SCOPE,
   liveAvatarId: DEFAULT_LIVEAVATAR_ID,
   liveAvatarAvatars: [],
@@ -466,6 +471,89 @@ function handleLiveAvatarList(message = {}) {
   queueLiveAvatarAutostart();
 }
 
+function liveAvatarCommandUrl(payload = {}) {
+  return payload.ws_url || payload.wsUrl || payload.websocket_url || payload.websocketUrl || "";
+}
+
+function sendLiveAvatarCommand(payload = {}) {
+  const socket = state.liveAvatarCommandSocket;
+  if (!socket || socket.readyState !== WebSocket.OPEN || !state.liveAvatarCommandReady) {
+    if (payload.type !== "session.keep_alive" && state.liveAvatarCommandQueue.length < 16) {
+      state.liveAvatarCommandQueue.push(payload);
+      return true;
+    }
+    return false;
+  }
+  socket.send(JSON.stringify(payload));
+  return true;
+}
+
+function flushLiveAvatarCommandQueue() {
+  if (!state.liveAvatarCommandQueue.length) return;
+  const queued = state.liveAvatarCommandQueue.splice(0);
+  queued.forEach((payload) => sendLiveAvatarCommand(payload));
+}
+
+function closeLiveAvatarCommandSocket() {
+  window.clearInterval(state.liveAvatarKeepAliveTimer);
+  state.liveAvatarKeepAliveTimer = 0;
+  state.liveAvatarCommandQueue = [];
+  state.liveAvatarCommandReady = false;
+  if (state.liveAvatarCommandSocket) {
+    try {
+      state.liveAvatarCommandSocket.close();
+    } catch {
+      // Ignore close errors.
+    }
+  }
+  state.liveAvatarCommandSocket = null;
+}
+
+function connectLiveAvatarCommandSocket(wsUrl) {
+  closeLiveAvatarCommandSocket();
+  if (!wsUrl) {
+    setBridgeStatus("sesion sin ws_url de audio", "error");
+    return;
+  }
+
+  const socket = new WebSocket(wsUrl);
+  state.liveAvatarCommandSocket = socket;
+  state.liveAvatarCommandReady = false;
+  setBridgeStatus("conectando audio directo");
+
+  socket.onopen = () => {
+    // The provider may also emit session.state_updated=connected; open is enough
+    // to avoid adding backend latency before the first Gemini audio chunks.
+    state.liveAvatarCommandReady = true;
+    setBridgeStatus("audio directo listo", "ready");
+    flushLiveAvatarCommandQueue();
+    state.liveAvatarKeepAliveTimer = window.setInterval(() => {
+      sendLiveAvatarCommand({
+        type: "session.keep_alive",
+        event_id: `keepalive-${Date.now()}`,
+      });
+    }, 45000);
+  };
+  socket.onmessage = (event) => {
+    try {
+      handleProviderEvent(JSON.parse(event.data));
+    } catch (error) {
+      console.debug("LiveAvatar direct WS message ignored:", error);
+    }
+  };
+  socket.onerror = () => {
+    state.liveAvatarCommandReady = false;
+    setBridgeStatus("audio directo con error", "error");
+  };
+  socket.onclose = () => {
+    window.clearInterval(state.liveAvatarKeepAliveTimer);
+    state.liveAvatarKeepAliveTimer = 0;
+    state.liveAvatarCommandReady = false;
+    state.liveAvatarCommandSocket = null;
+    setBridgeStatus("audio directo cerrado");
+  };
+}
+
 function connectLiveAvatarRoom(payload = {}) {
   const client = liveAvatarClient();
   if (!client) {
@@ -487,6 +575,7 @@ function connectLiveAvatarRoom(payload = {}) {
   state.liveAvatarMediaStream = mediaStream;
   state.liveAvatarConnected = false;
   state.liveAvatarHasVideo = false;
+  connectLiveAvatarCommandSocket(liveAvatarCommandUrl(payload));
   elements.liveAvatarStage.classList.remove("has-stream");
   setPlaceholder("Conectando video LiveAvatar...");
 
@@ -547,6 +636,8 @@ function rejectLiveAvatarWaiters(error) {
 
 function handleProviderEvent(event = {}) {
   if (event.type === "session.state_updated") {
+    state.liveAvatarCommandReady = event.state === "connected" || state.liveAvatarCommandReady;
+    if (state.liveAvatarCommandReady) flushLiveAvatarCommandQueue();
     setBridgeStatus(`estado ${event.state || "desconocido"}`, event.state === "connected" ? "ready" : "idle");
     return;
   }
@@ -727,8 +818,14 @@ function waitForLiveAvatarSession(timeoutMs = 30000) {
 }
 
 function sendToLiveAvatar(base64, mimeType) {
-  if (!sendLiveAvatarBridgeMessage({ type: "audio", mimeType, data: base64 })) {
-    setBridgeStatus("audio Gemini recibido pero bridge no esta listo", "error");
+  const ok = sendLiveAvatarCommand({
+    type: "agent.speak",
+    event_id: `turn-${state.liveAvatarTurn + 1}`,
+    audio: base64,
+    mimeType,
+  });
+  if (!ok) {
+    setBridgeStatus("audio Gemini recibido pero LiveAvatar WS no esta listo", "error");
     return false;
   }
   state.liveAvatarAudioChunksSent += 1;
@@ -736,10 +833,15 @@ function sendToLiveAvatar(base64, mimeType) {
 }
 
 function endLiveAvatarTurn() {
-  sendLiveAvatarBridgeMessage({ type: "speak_end" });
+  sendLiveAvatarCommand({
+    type: "agent.speak_end",
+    event_id: `turn-${state.liveAvatarTurn + 1}`,
+  });
+  state.liveAvatarTurn += 1;
 }
 
 function stopLiveAvatarSession() {
+  closeLiveAvatarCommandSocket();
   sendLiveAvatarBridgeMessage({ type: "stop_session" });
   if (state.liveAvatarRoom) {
     state.liveAvatarRoom.disconnect();
@@ -964,7 +1066,7 @@ async function handleGeminiMessage(rawEvent) {
   const content = message.serverContent;
   if (content) {
     if (content.interrupted) {
-      sendLiveAvatarBridgeMessage({ type: "interrupt" });
+      sendLiveAvatarCommand({ type: "agent.interrupt" });
     }
     const inputTranscript = content.inputTranscription || content.input_transcription;
     if (inputTranscript?.text) {
@@ -979,7 +1081,7 @@ async function handleGeminiMessage(rawEvent) {
     const outputTranscript = content.outputTranscription || content.output_transcription;
     const leakedToolSpeech = looksLikeSpokenToolCall(outputTranscript?.text);
     if (leakedToolSpeech) {
-      sendLiveAvatarBridgeMessage({ type: "interrupt" });
+      sendLiveAvatarCommand({ type: "agent.interrupt" });
       setGeminiStatus("tool hablada bloqueada", "error");
     }
     parts.forEach((part) => {
